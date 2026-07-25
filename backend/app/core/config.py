@@ -1,0 +1,157 @@
+"""
+================================================================
+「隐盾」AI 个人信息智能脱敏工具 - 全局配置
+================================================================
+所有可配置参数集中管理，方便后续迭代调整。
+"""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# --- 项目根目录 ---
+ROOT_DIR = Path(__file__).parent.parent
+
+# --- 服务配置 ---
+class ServerConfig:
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    WORKERS: int = int(os.getenv("WORKERS", "1"))
+
+# --- GPU 配置 ---
+class GPUConfig:
+    USE_GPU: bool = os.getenv("USE_GPU", "true").lower() == "true"
+    DEVICE: str = "gpu" if USE_GPU else "cpu"
+    # 显存限制，防止 OOM
+    MEMORY_LIMIT_MB: int = int(os.getenv("GPU_MEMORY_MB", "2048"))
+
+# --- 安全配置 ---
+class SecurityConfig:
+    MAX_FILE_SIZE_MB: int = 20                    # 上传文件大小上限
+    ALLOWED_EXTENSIONS: set = {"png", "jpg", "jpeg", "webp", "bmp"}
+    MAX_IMAGE_DIMENSION: int = 4096               # 图片最大边长
+    # ⚠️ 核心隐私原则：图片不落盘，仅内存处理
+    TEMP_DIR: str = ""                            # 留空=内存处理，填写路径=落盘(调试用)
+    RESPONSE_TIMEOUT: int = 60                    # 请求超时(秒)
+    # 请求频率限制
+    RATE_LIMIT_PER_MINUTE: int = 30
+
+# --- OCR 配置 ---
+class OCRConfig:
+    # PaddleOCR 模型选择
+    # det: 文本检测 | rec: 文本识别 | cls: 方向分类
+    LANG: str = "ch"                              # 中英文混合
+    DET_MODEL_DIR: str = ""                       # 留空=自动下载预训练模型
+    REC_MODEL_DIR: str = ""
+    # 检测精度 (降低可提速)
+    DET_DB_THRESH: float = 0.3
+    DET_DB_BOX_THRESH: float = 0.5
+    # 识别精度
+    REC_BATCH_NUM: int = 6
+    # 最大文本长度
+    MAX_TEXT_LENGTH: int = 25
+
+# --- 目标检测配置 ---
+class DetectionConfig:
+    # YOLOv8-nano 模型 (人脸/证件/票据)
+    MODEL_NAME: str = "yolov8n.pt"  # 本地文件或自动下载
+    CONF_THRESHOLD: float = 0.35                  # 检测置信度阈值
+    IOU_THRESHOLD: float = 0.45                   # NMS IoU 阈值
+    # 可检测的目标类别 (从 COCO + 自定义)
+    SENSITIVE_CLASSES: list = [
+        "person", "cell phone", "book",           # COCO 通用
+        # 以下需要微调自定义模型:
+        # "id_card", "bank_card", "invoice", "express_slip"
+    ]
+
+# --- 脱敏算法配置 ---
+class DesensitizeConfig:
+    # 像素化 (马赛克)
+    PIXELATE_BLOCK_SIZE: int = 8                  # 马赛克块大小 (越大越模糊)
+    # 高斯噪点
+    GAUSSIAN_SIGMA_MIN: float = 15.0              # 最小模糊强度
+    GAUSSIAN_SIGMA_MAX: float = 45.0              # 最大模糊强度
+    GAUSSIAN_NOISE_LEVEL: float = 0.15            # 额外噪点比例
+    # 不可逆替换 (核心算法)
+    IRREVERSIBLE_SEED_ROUNDS: int = 3             # 随机种子轮次
+    IRREVERSIBLE_PATCH_SIZE: int = 4              # 替换块大小
+    # 字符掩码
+    CHAR_MASK_PATTERN: str = "*"                  # 替换字符
+    CHAR_MASK_KEEP_FIRST: int = 3                 # 保留前 N 位
+    CHAR_MASK_KEEP_LAST: int = 4                  # 保留后 N 位
+
+# --- 反还原检测配置 ---
+class AntiRestoreConfig:
+    # SSIM 阈值 (低于此值认为安全)
+    SSIM_SAFE_THRESHOLD: float = 0.85
+    # PSNR 阈值
+    PSNR_SAFE_THRESHOLD: float = 30.0
+    # 局部纹理分析块大小
+    TEXTURE_PATCH_SIZE: int = 32
+    # 检测轮次
+    CHECK_ROUNDS: int = 3
+
+# --- 敏感信息正则模式库 ---
+# ⚠️ 可扩展：在此添加新的敏感信息类型
+SENSITIVE_PATTERNS = {
+    "身份证号": {
+        "pattern": r"\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b",
+        "category": "identity",
+        "risk_level": "high",
+    },
+    "手机号": {
+        "pattern": r"\b1[3-9]\d{9}\b",
+        "category": "contact",
+        "risk_level": "high",
+    },
+    "固定电话": {
+        "pattern": r"\b0\d{2,3}-?\d{7,8}\b",
+        "category": "contact",
+        "risk_level": "medium",
+    },
+    "银行卡号": {
+        "pattern": r"\b(?:62|60|9[0-9]|5[1-5]|4\d)\d{14,17}\b",
+        "category": "finance",
+        "risk_level": "high",
+    },
+    "电子邮箱": {
+        "pattern": r"\b[\w.-]+@[\w.-]+\.\w{2,}\b",
+        "category": "contact",
+        "risk_level": "medium",
+    },
+    "家庭住址": {
+        "pattern": r"(?:省|市|区|县|镇|乡|村|路|街|巷|号|栋|单元|室|楼)\S{0,20}",
+        "category": "location",
+        "risk_level": "high",
+    },
+    "车牌号": {
+        "pattern": r"\b[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁][A-Z][A-HJ-NP-Z0-9]{4,5}[A-HJ-NP-Z0-9挂学警港澳]\b",
+        "category": "identity",
+        "risk_level": "medium",
+    },
+    "快递单号": {
+        "pattern": r"\b(?:SF|YT|ZTO|STO|YUNDA|JD|DB|DEPPON|EMS)\d{10,18}\b",
+        "category": "logistics",
+        "risk_level": "medium",
+    },
+    "IP 地址": {
+        "pattern": r"\b(?:\d{1,3}\.){3}\d{1,3}\b",
+        "category": "network",
+        "risk_level": "low",
+    },
+    "微信号": {
+        "pattern": r"\bwxid_[a-zA-Z0-9_-]+\b",
+        "category": "social",
+        "risk_level": "medium",
+    },
+    "QQ号": {
+        "pattern": r"\b[1-9]\d{4,10}\b",
+        "category": "social",
+        "risk_level": "low",
+        # ⚠️ 备注：此正则会匹配 5-11 位数字，存在误匹配风险（如日期、金额）
+        # 实际使用中用户可手动取消选中非敏感区域
+    },
+}

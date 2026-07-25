@@ -1,0 +1,36 @@
+# ============================================
+# 「隐盾」AI 个人信息智能脱敏工具 - 后端依赖
+# Python 3.10+  |  CUDA 11.8 (GPU 加速)
+# ============================================
+
+# --- Web 框架 ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.12
+
+# --- OCR 引擎 (PaddleOCR) ---
+paddlepaddle-gpu==3.0.0rc1        # GPU 版本，CPU 用 paddlepaddle==3.0.0rc1
+paddleocr>=2.9.0
+
+# --- 目标检测 ---
+ultralytics>=8.2.0                # YOLOv8-nano
+
+# --- 图像处理 ---
+opencv-python-headless==4.10.0    # 无 GUI 依赖
+Pillow>=10.4.0
+numpy>=1.26.0
+
+# --- 安全脱敏算法 ---
+scipy>=1.13.0                     # 数学运算 (高斯核生成)
+cryptography>=42.0.0              # 安全随机数
+
+# --- 图像质量评估 (反还原检测) ---
+scikit-image>=0.24.0              # SSIM 计算
+
+# --- 工具 ---
+pydantic>=2.8.0                   # 数据校验
+python-dotenv>=1.0.0              # 环境变量
+httpx>=0.27.0                     # 异步 HTTP 客户端 (内部调用)
+
+# --- 部署 ---
+gunicorn>=22.0.0                  # 生产环境 WSGI
