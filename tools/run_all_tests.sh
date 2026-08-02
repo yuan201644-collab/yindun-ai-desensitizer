@@ -29,6 +29,9 @@ run_test "后端 pytest" "tools/test_backend.sh"
 # 前端单元测试（脚本内部 cd 到 frontend/）
 run_test "前端 vitest" "tools/test_frontend.sh"
 
+# 前端 TS 类型检查（vue-tsc --noEmit，类型错误在测试阶段就拦住）
+run_test "前端 TS 类型检查" "tools/test_typescript.sh"
+
 echo "===== 测试汇总 ====="
 echo "通过: $PASS"
 echo "失败: $FAIL"

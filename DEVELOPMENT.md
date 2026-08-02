@@ -98,7 +98,7 @@ planning → coding → testing → done
                 ↘ failed（超过最大迭代）
 ```
 - 人只做两件事：**开头写 task.md**、**结尾确认提交/push**
-- 全自动：`./orchestrator_auto.sh`（claude -p 串行调度 + 热循环守卫 MAX_STALL=3）
+- 全自动：`./orchestrator_auto.sh`（v2：claude -p 串行调度 + 异常恢复[status 损坏防护/断点续跑/卡住警告] + 可观测性[history.log/失败快照] + 成本控制[`--max-budget-usd`] + 热循环守卫 MAX_STALL=3）
 - 半自动：`./orchestrator.sh`（按提示切终端）
 
 ### 4.3 提示词
@@ -215,6 +215,7 @@ planning → coding → testing → done
 | `test_text_patterns.py` | backend/tests/ | SENSITIVE_PATTERNS 正则正确性 |
 | `sensitivePatterns.test.ts` | frontend/tests/ | applyMask + 模式库检测 |
 | `useDesensitize.test.ts` | frontend/tests/ | 脱敏状态管理（选区/清空/去重） |
+| TS 类型检查 `vue-tsc --noEmit` | frontend/tsconfig.json | 全量类型检查（`./tools/test_typescript.sh`） |
 
 ### 10.3 测试原则
 - 架构师（测试端）维护测试套件，工程师不写测试
