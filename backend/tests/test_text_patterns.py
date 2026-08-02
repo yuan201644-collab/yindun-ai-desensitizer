@@ -49,3 +49,18 @@ def test_passport_pattern_matches_within_cn_text():
     p = SENSITIVE_PATTERNS["护照号"]
     text = "我的护照号E12345678，请查收"
     assert re.search(p["pattern"], text)
+
+
+def test_landline_pattern_matches_valid():
+    p = SENSITIVE_PATTERNS["固定电话"]
+    assert re.search(p["pattern"], "021-12345678")
+    assert re.search(p["pattern"], "02112345678")
+    assert re.search(p["pattern"], "010-12345678")
+    assert p["category"] == "contact"
+    assert p["risk_level"] == "medium"
+
+
+def test_landline_pattern_rejects_short_and_mobile():
+    p = SENSITIVE_PATTERNS["固定电话"]
+    assert not re.search(p["pattern"], "0211234")
+    assert not re.search(p["pattern"], "13812345678")

@@ -65,4 +65,43 @@ describe('DEFAULT_PATTERNS 模式库', () => {
     const raw = 'AE12345678'
     expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
   })
+
+  it('模式库包含固定电话条目', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '固定电话')!
+    expect(p.category).toBe('contact')
+    expect(p.riskLevel).toBe('medium')
+    expect(p.keepFirst).toBe(3)
+    expect(p.keepLast).toBe(4)
+    expect(p.maskChar).toBe('*')
+  })
+
+  it('检测并掩码固定电话（带连字符，保留前3后4）', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '固定电话')!
+    const masked = '021-12345678'.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))
+    expect(masked).toBe('021*****5678')
+  })
+
+  it('检测并掩码固定电话（无连字符）', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '固定电话')!
+    const masked = '02112345678'.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))
+    expect(masked).toBe('021****5678')
+  })
+
+  it('固定电话模式不误配手机号', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '固定电话')!
+    const raw = '13812345678'
+    expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
+  })
+
+  it('固定电话模式不误配短号码', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '固定电话')!
+    const raw = '0211234'
+    expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
+  })
+
+  it('固定电话模式不误配含 0 的手机号', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '固定电话')!
+    const raw = '13901234567'
+    expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
+  })
 })

@@ -40,6 +40,15 @@ export const DEFAULT_PATTERNS: SensitivePattern[] = [
     maskChar: '*',
   },
   {
+    type: '固定电话',
+    pattern: /0\d{2,3}-?\d{7,8}/g,
+    category: 'contact',
+    riskLevel: 'medium',
+    keepFirst: 3,
+    keepLast: 4,
+    maskChar: '*',
+  },
+  {
     type: '统一社会信用代码',
     pattern: /[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}/g,
     category: 'identity',
