@@ -102,6 +102,16 @@ SENSITIVE_PATTERNS = {
         "category": "identity",
         "risk_level": "high",
     },
+    "统一社会信用代码": {
+        "pattern": r"\b[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}\b",
+        "category": "identity",
+        "risk_level": "high",
+    },
+    "护照号": {
+        "pattern": r"(?<![A-Za-z0-9])[EG]\d{8}(?![A-Za-z0-9])",
+        "category": "identity",
+        "risk_level": "high",
+    },
     "手机号": {
         "pattern": r"\b1[3-9]\d{9}\b",
         "category": "contact",

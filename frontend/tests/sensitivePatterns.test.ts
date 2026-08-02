@@ -28,4 +28,41 @@ describe('DEFAULT_PATTERNS 模式库', () => {
     const masked = '13812345678'.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))
     expect(masked).toBe('138****5678')
   })
+
+  it('检测并掩码统一社会信用代码（保留前3后4）', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '统一社会信用代码')!
+    const raw = '91310000MA1FL4XK9X'
+    const masked = raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))
+    expect(masked).toBe('913***********XK9X')
+  })
+
+  it('统一社会信用代码模式不误配手机号', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '统一社会信用代码')!
+    const raw = '13812345678'
+    expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
+  })
+
+  it('模式库包含护照号条目', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '护照号')!
+    expect(p.category).toBe('identity')
+    expect(p.riskLevel).toBe('high')
+  })
+
+  it('检测并掩码护照号（保留前2后2）', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '护照号')!
+    const masked = 'E12345678'.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))
+    expect(masked).toBe('E1*****78')
+  })
+
+  it('护照号模式不误配缺位数字', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '护照号')!
+    const raw = 'E1234567'
+    expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
+  })
+
+  it('护照号模式不误配嵌入字母数字串', () => {
+    const p = DEFAULT_PATTERNS.find(x => x.type === '护照号')!
+    const raw = 'AE12345678'
+    expect(raw.replace(p.pattern, m => applyMask(m, p.keepFirst, p.keepLast))).toBe(raw)
+  })
 })

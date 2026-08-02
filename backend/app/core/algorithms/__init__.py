@@ -253,6 +253,8 @@ class CharacterMaskDesensitizer:
             keep_first, keep_last = 3, 4  # 138****1234
         elif sensitive_type == "银行卡号":
             keep_first, keep_last = 4, 4  # 6222********1234
+        elif sensitive_type == "护照号":
+            keep_first, keep_last = 2, 2  # E1*****78，与前端掩码策略一致
         elif sensitive_type == "电子邮箱":
             # 保留首字符和@后部分
             at_idx = text.find("@")
