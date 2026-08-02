@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { DEFAULT_PATTERNS, applyMask } from '../../utils/sensitivePatterns'
+import { SCENARIO_TEMPLATES, getTemplate, filterPatternsByTemplate } from '../../utils/scenarioTemplates'
 
 const inputText = ref('')
 const maskedText = ref('')
@@ -8,6 +9,8 @@ const isProcessed = ref(false)
 const processing = ref(false)
 const error = ref('')
 const previewMode = ref<'masked' | 'highlighted'>('highlighted')
+const activeTemplate = ref('general')
+const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 
 interface SpanResult { start: number; end: number; type: string; category: string; riskLevel: string; matchText: string; maskChar: string }
 const spans = ref<SpanResult[]>([])
@@ -17,7 +20,8 @@ function detectLocally() {
   spans.value = []
   const text = inputText.value
   if (!text.trim()) return
-  for (const pattern of DEFAULT_PATTERNS) {
+  const patterns = filterPatternsByTemplate(DEFAULT_PATTERNS, activeTemplateObj.value)
+  for (const pattern of patterns) {
     const regex = new RegExp(pattern.pattern.source, pattern.pattern.flags)
     let match: RegExpExecArray | null
     while ((match = regex.exec(text)) !== null) {
@@ -57,6 +61,7 @@ const sampleTexts = [
   '张三，身份证号110101199001011234，手机13800138000，住北京市朝阳区某某路100号。',
   '订单号SF1234567890123，收货人李四，电话13912345678，地址广东省深圳市南山区科技园。',
   '银行卡号6222021234567890123，开户行中国工商银行，户名王五。',
+  '【快递单】收件人：王小明，电话13812345678，地址：浙江省杭州市西湖区文三路100号，单号：YT1234567890123，包裹内件：文件。',
 ]
 function useSample(index: number) { inputText.value = sampleTexts[index]; detectLocally() }
 
@@ -88,6 +93,13 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
       </div>
     </div>
     <div class="input-section" v-if="!isProcessed">
+      <div class="template-select">
+        <p class="template-label">🎯 场景模板：</p>
+        <div class="template-list">
+          <span v-for="t in SCENARIO_TEMPLATES" :key="t.id" class="template-chip" :class="{ active: activeTemplate === t.id }" :title="t.desc" @click="activeTemplate = t.id">{{ t.icon }} {{ t.name }}</span>
+        </div>
+        <p class="template-desc">{{ activeTemplateObj.desc }}</p>
+      </div>
       <textarea v-model="inputText" class="text-input" placeholder="在此粘贴聊天记录、订单信息、文档片段..." rows="10"></textarea>
       <div class="samples"><span class="samples-label">📋 快速粘贴示例：</span>
         <div class="sample-list"><span v-for="(s, i) in sampleTexts" :key="i" class="sample-item" @click="useSample(i)">示例{{ i+1 }}</span></div>
@@ -118,6 +130,12 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
 .hero { text-align: center; padding: 24px 0; }
 .hero-title { font-size: 28px; font-weight: 700; color: #e0e0f0; }
 .hero-sub { color: #8888aa; font-size: 14px; margin-top: 8px; }
+.template-select { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+.template-label { font-size: 13px; font-weight: 600; color: #aaaacc; margin-bottom: 8px; }
+.template-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.template-chip { background: #2a2a4a; color: #aaaacc; font-size: 13px; padding: 6px 14px; border-radius: 20px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+.template-chip.active { background: rgba(108,99,255,0.2); color: #6c63ff; border-color: #6c63ff; font-weight: 600; }
+.template-desc { font-size: 11px; color: #6666aa; margin-top: 8px; }
 .text-input { width: 100%; background: #111122; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; color: #e0e0f0; font-size: 14px; line-height: 1.8; min-height: 200px; resize: vertical; box-sizing: border-box; }
 .samples { margin: 12px 0; } .samples-label { font-size: 12px; color: #6666aa; }
 .sample-list { display: flex; gap: 8px; margin-top: 6px; }

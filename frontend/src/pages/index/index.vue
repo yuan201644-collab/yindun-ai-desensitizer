@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useImageUpload } from '../../composables/useImageUpload'
 import { useOCR } from '../../composables/useOCR'
 import { useDesensitize } from '../../composables/useDesensitize'
 import { applyDesensitize, drawImageToCanvas, canvasToBlob } from '../../utils/canvas'
+import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -15,6 +16,8 @@ const processedImage = ref('')
 const processingMode = ref<'local' | 'cloud'>('cloud')
 const activeTab = ref<'detect' | 'desensitize' | 'result'>('detect')
 const showHelp = ref(true)
+const activeTemplate = ref('general')
+const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 
 function onFileSelected(e: Event) {
   const target = e.target as HTMLInputElement
@@ -32,17 +35,32 @@ async function runOCR() {
   } else {
     ocrError.value = '本地OCR模式开发中，请使用云端增强模式'
   }
-  if (textRegions.value.length > 0) {
-    textRegions.value.forEach((r: any) => {
-      if (r.sensitive && r.sensitive.risk_level !== 'low') {
-        addRegion({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
-      }
-    })
-  }
+  applyTemplateAutoSelect()
+  activeTab.value = 'desensitize'
+}
+
+/** 按当前场景模板自动选区（模板带 preferTypes 时只选偏好类型；通用则按风险全选） */
+function applyTemplateAutoSelect() {
+  clearRegions()
+  const t = activeTemplateObj.value
+  textRegions.value.forEach((r: any) => {
+    const type = r.sensitive?.type
+    const inPrefer = t.preferTypes?.length ? t.preferTypes!.includes(type) : false
+    const byRisk = r.sensitive && r.sensitive.risk_level !== 'low'
+    if (inPrefer || (!t.preferTypes?.length && byRisk)) {
+      addRegion({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
+    }
+  })
   objectRegions.value.forEach((r: any) => {
     addRegion({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
   })
-  activeTab.value = 'desensitize'
+}
+
+function onTemplateChange() {
+  const t = getTemplate(activeTemplate.value)
+  if (t.defaultMethod) method.value = t.defaultMethod
+  if (t.defaultIntensity) intensity.value = t.defaultIntensity
+  if (textRegions.value.length || objectRegions.value.length) applyTemplateAutoSelect()
 }
 
 async function runDesensitize() {
@@ -187,6 +205,13 @@ onUnmounted(() => { resetUpload() })
 
         <div v-if="(textRegions.length > 0 || objectRegions.length > 0) && !isProcessed" class="regions-list">
           <p class="panel-title">检测到 {{ textRegions.length }} 处文本<span v-if="objectRegions.length"> + {{ objectRegions.length }} 个目标</span></p>
+          <div class="template-select">
+            <p class="section-title">🎯 场景模板</p>
+            <div class="template-list">
+              <span v-for="t in SCENARIO_TEMPLATES" :key="t.id" class="template-chip" :class="{ active: activeTemplate === t.id }" :title="t.desc" @click="activeTemplate = t.id; onTemplateChange()">{{ t.icon }} {{ t.name }}</span>
+            </div>
+            <p class="template-desc">{{ activeTemplateObj.desc }}</p>
+          </div>
           <div class="method-select">
             <p class="section-title">脱敏方式</p>
             <label v-for="opt in methodOptions" :key="opt.value" class="method-option">
@@ -258,6 +283,10 @@ onUnmounted(() => { resetUpload() })
 .control-panel { width: 280px; flex-shrink: 0; background: #1a1a2e; border-radius: 12px; padding: 16px; }
 .panel-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .section-title { font-size: 13px; font-weight: 600; color: #aaaacc; margin: 12px 0 6px; }
+.template-list { display: flex; gap: 6px; flex-wrap: wrap; }
+.template-chip { background: #2a2a4a; color: #aaaacc; font-size: 12px; padding: 5px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+.template-chip.active { background: rgba(108,99,255,0.2); color: #6c63ff; border-color: #6c63ff; font-weight: 600; }
+.template-desc { font-size: 11px; color: #6666aa; margin: 6px 0 2px; line-height: 1.5; }
 .method-option { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid #2a2a4a; gap: 2px; cursor: pointer; }
 .method-desc { font-size: 11px; color: #6666aa; }
 .selected-count { font-size: 13px; color: #b0b0d0; margin: 12px 0; }

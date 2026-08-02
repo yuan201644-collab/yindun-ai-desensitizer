@@ -42,6 +42,12 @@
 - 时间戳规范：`last_updated` 必须用 `date '+%Y-%m-%d %H:%M'` 取真实时钟
 - 测试命令改走 `tools/test_backend.sh` / `tools/test_frontend.sh`，适配 headless 自动运行
 
+### 场景模板（方向③ 打样）
+- 新增 `scenarioTemplates.ts` 模板注册表：通用 / 快递单 / 聊天记录 / 证件照
+- 文本页：选模板只检测该场景相关的敏感类型（如快递单=手机号/固话/地址/单号）
+- 图片页：选模板自动选区偏好类型 + 默认脱敏算法/强度（快递单默认不可逆高强）
+- 新增快递单示例文本，一键演示；模板逻辑有 vitest 覆盖
+
 ### 对抗还原测试（方向① 轻量版）
 - 新增 `AdversarialService`：对脱敏区域跑 3 种还原攻击（超分插值 / Richardson-Lucy 去模糊 / 边缘增强），测"还原后与原图"的 SSIM/PSNR
 - `/api/check` 响应新增 `region_details[].adversarial` 与 `adversarial_summary`（safe/warning/danger 判定 + 卖点文案）
