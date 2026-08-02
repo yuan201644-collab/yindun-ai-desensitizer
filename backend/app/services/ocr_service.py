@@ -5,7 +5,19 @@
 import re
 import numpy as np
 from typing import Optional
-from app.core.config import OCRConfig, SENSITIVE_PATTERNS
+from app.core.config import OCRConfig, SENSITIVE_PATTERNS, SENSITIVE_OBJECT_LABELS
+
+
+# 类别优先级：具体敏感类型优先于模糊的"地址"类（避免松散地址正则抢命中）
+CATEGORY_PRIORITY = {
+    "identity": 0,
+    "finance": 1,
+    "logistics": 2,
+    "contact": 3,
+    "social": 4,
+    "network": 5,
+    "location": 6,
+}
 
 
 class OCRService:
@@ -61,16 +73,28 @@ class OCRService:
         return regions
 
     def _classify_sensitive(self, text: str) -> Optional[dict]:
+        # 收集所有命中，按类别优先级选最优（避免"地址"松散正则抢命中）
+        hits = []
         for type_name, config in SENSITIVE_PATTERNS.items():
             match = re.search(config["pattern"], text)
             if match:
-                return {
-                    "type": type_name,
-                    "category": config["category"],
-                    "risk_level": config["risk_level"],
-                    "matched_text": match.group(),
-                }
-        return None
+                hits.append((
+                    CATEGORY_PRIORITY.get(config["category"], 9),
+                    type_name,
+                    config,
+                    match,
+                ))
+        if not hits:
+            return None
+        hits.sort(key=lambda h: h[0])
+        _, type_name, config, match = hits[0]
+        return {
+            "type": type_name,
+            "category": config["category"],
+            "risk_level": config["risk_level"],
+            "matched_text": match.group(),
+            "object_label": SENSITIVE_OBJECT_LABELS.get(config["category"], type_name),
+        }
 
     def filter_sensitive_only(self, regions: list[dict]) -> list[dict]:
         return [r for r in regions if r.get("sensitive") is not None]

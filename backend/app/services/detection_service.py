@@ -22,9 +22,16 @@ class DetectionService:
             return
         try:
             from ultralytics import YOLO
-            self._model = YOLO(DetectionConfig.MODEL_NAME)
-            self._available = True
-            print("[Detection] YOLOv8-nano (CPU) 初始化完成")
+            import os
+            custom = DetectionConfig.CUSTOM_MODEL_PATH
+            if os.path.exists(custom):
+                self._model = YOLO(custom)
+                self._available = True
+                print(f"[Detection] 自定义模型加载完成: {custom}")
+            else:
+                self._model = YOLO(DetectionConfig.MODEL_NAME)
+                self._available = True
+                print("[Detection] YOLOv8-nano (COCO 回退) 初始化完成")
         except Exception as e:
             self._available = False
             print(f"[Detection] YOLO 不可用 (重启系统后重试): {e}")
@@ -61,5 +68,5 @@ class DetectionService:
 
     @staticmethod
     def filter_sensitive(detections: list[dict]) -> list[dict]:
-        sensitive_labels = {"person", "cell phone", "book"}
+        sensitive_labels = set(DetectionConfig.SENSITIVE_CLASSES)
         return [d for d in detections if d["label"] in sensitive_labels]

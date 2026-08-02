@@ -58,13 +58,14 @@ class OCRConfig:
 class DetectionConfig:
     # YOLOv8-nano 模型 (人脸/证件/票据)
     MODEL_NAME: str = "yolov8n.pt"  # 本地文件或自动下载
+    # 自定义微调模型路径 (存在则优先加载，否则回退 COCO)
+    CUSTOM_MODEL_PATH: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../models/yolo_custom.pt")
     CONF_THRESHOLD: float = 0.35                  # 检测置信度阈值
     IOU_THRESHOLD: float = 0.45                   # NMS IoU 阈值
-    # 可检测的目标类别 (从 COCO + 自定义)
+    # 可检测的目标类别 (COCO 通用 + 自定义微调类别)
     SENSITIVE_CLASSES: list = [
         "person", "cell phone", "book",           # COCO 通用
-        # 以下需要微调自定义模型:
-        # "id_card", "bank_card", "invoice", "express_slip"
+        "id_card", "bank_card", "invoice", "express_slip",  # 自定义微调 (POC 训练)
     ]
 
 # --- 脱敏算法配置 ---
@@ -98,7 +99,7 @@ class AntiRestoreConfig:
 # ⚠️ 可扩展：在此添加新的敏感信息类型
 SENSITIVE_PATTERNS = {
     "身份证号": {
-        "pattern": r"\b[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]\b",
+        "pattern": r"(?<![0-9])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![0-9])",
         "category": "identity",
         "risk_level": "high",
     },
@@ -143,7 +144,7 @@ SENSITIVE_PATTERNS = {
         "risk_level": "medium",
     },
     "快递单号": {
-        "pattern": r"\b(?:SF|YT|ZTO|STO|YUNDA|JD|DB|DEPPON|EMS)\d{10,18}\b",
+        "pattern": r"(?<![A-Za-z0-9])(?:SF|YT|ZTO|STO|YUNDA|JD|DB|DEPPON|EMS)\d{10,18}(?![0-9])",
         "category": "logistics",
         "risk_level": "medium",
     },
@@ -164,4 +165,16 @@ SENSITIVE_PATTERNS = {
         # ⚠️ 备注：此正则会匹配 5-11 位数字，存在误匹配风险（如日期、金额）
         # 实际使用中用户可手动取消选中非敏感区域
     },
+}
+
+# --- 敏感对象语义标签 (Part A) ---
+# OCR 命中敏感模式时，把区域标记成对应的敏感对象类型（category → 标签）
+SENSITIVE_OBJECT_LABELS = {
+    "identity": "🪪 证件",
+    "contact": "📱 联系方式",
+    "finance": "💳 银行卡",
+    "location": "📍 地址",
+    "logistics": "📦 快递单",
+    "network": "🌐 网络",
+    "social": "👤 社交账号",
 }

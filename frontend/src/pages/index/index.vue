@@ -181,7 +181,7 @@ onUnmounted(() => { resetUpload() })
               height: (region.rect.h / uploadState.height * 100) + '%',
             }"
             @click.stop="toggleRegion({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
-            <span class="region-label">{{ region.sensitive?.type || region.text }}</span>
+            <span class="region-label">{{ region.sensitive?.object_label || region.sensitive?.type || region.text }}</span>
           </div>
           <div v-for="(region, i) in objectRegions" :key="'o'+i" class="region-box object-region"
             :class="{ selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}) }"

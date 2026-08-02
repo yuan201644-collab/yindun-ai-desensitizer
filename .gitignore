@@ -15,6 +15,10 @@ node_modules/
 *.onnx
 models/
 
+# 训练产物（合成数据集、runs 输出）
+backend/datasets/
+backend/runs/
+
 # IDE
 .vscode/
 .idea/

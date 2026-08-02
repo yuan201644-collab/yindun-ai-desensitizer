@@ -6,7 +6,7 @@ export interface OCRRegion {
   rect: { x: number; y: number; w: number; h: number }
   text: string
   confidence: number
-  sensitive: { type: string; category: string; risk_level: string; matched_text: string } | null
+  sensitive: { type: string; category: string; risk_level: string; matched_text: string; object_label?: string } | null
 }
 
 export interface ObjectRegion {
