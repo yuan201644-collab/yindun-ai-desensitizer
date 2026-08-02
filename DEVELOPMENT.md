@@ -90,7 +90,7 @@ yindun/
 |---|---|---|---|
 | **架构师 = 测试端** | **主会话 Claude（本仓库）** | 写方案 / 补测试 / 跑回归 / 版本指派 / PATCH 本地 commit | 不写业务代码 |
 | **工程师 = 开发端** | **子 agent / headless `claude -p`** | 按方案写代码、按测试报告修 bug | 不写测试 / 不跑测试 / 不提交 / 不 bump 版本 |
-| **推送端** | **VSCode Claude** | GitHub push、MINOR/MAJOR 打包 | 版本号不归它定 |
+| **推送端** | **主会话 Claude（架构师/测试端）** | GitHub push、MINOR/MAJOR 打包（先问用户） | 版本号由用户+测试端指派 |
 
 ### 4.2 状态机（.agent-workflow/status.json 的 phase）
 ```
@@ -183,7 +183,7 @@ planning → coding → testing → done
 | **MAJOR**（x.0.0） | ✅ | ✅（用户确认） | ✅（用户确认） |
 | **紧急 PATCH**（崩溃/丢数据） | ✅ | ✅ 例外允许 | ✅ 例外允许 |
 
-- **分工**：PATCH 由测试端本地 commit；MINOR/MAJOR 由开发端（VSCode Claude）commit + push + 打包（打包前先问用户）
+- **分工**：PATCH 由测试端本地 commit；MINOR/MAJOR 由**主会话（架构师/测试端）** commit + push + 打包（push 前先问用户）——VSCode 不再参与 push
 - 每次 commit 同步版本常量 + CHANGELOG
 - **yindun 打包方式**：前端 `cd frontend && npm run build`（vite dist）；后端 `cd backend && docker build`
 - **提交前必须先询问用户确认**，不要默认自动 push
