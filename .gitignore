@@ -33,3 +33,10 @@ Thumbs.db
 
 # Vite
 frontend/dist/
+
+# Test caches
+.pytest_cache/
+frontend/tests/coverage/
+
+# Workflow logs
+.agent-workflow/logs/
