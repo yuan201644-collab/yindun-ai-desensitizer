@@ -6,10 +6,24 @@
 import { ref, type Ref } from 'vue'
 import { checkStrength } from '../utils/api'
 
+export interface AdversarialAttack {
+  name: string
+  restored_ssim: number
+  restored_psnr: number
+}
+
+export interface AdversarialResult {
+  attacks: AdversarialAttack[]
+  max_restored_ssim: number
+  verdict: 'safe' | 'warning' | 'danger'
+  message: string
+}
+
 export interface CheckResult {
   global_risk_score: number
   global_risk_level: 'safe' | 'warning' | 'danger'
   global_message: string
+  adversarial_summary?: { verdict: string; message: string }
   region_details: Array<{
     region_index: number
     ssim: number
@@ -18,6 +32,7 @@ export interface CheckResult {
     risk_score: number
     risk_level: string
     suggestion: string
+    adversarial?: AdversarialResult
   }>
   total_regions_checked: number
 }

@@ -41,3 +41,10 @@
 - 双 Agent 自动化工作流框架搭建（orchestrator + prompts + tools）
 - 时间戳规范：`last_updated` 必须用 `date '+%Y-%m-%d %H:%M'` 取真实时钟
 - 测试命令改走 `tools/test_backend.sh` / `tools/test_frontend.sh`，适配 headless 自动运行
+
+### 对抗还原测试（方向① 轻量版）
+- 新增 `AdversarialService`：对脱敏区域跑 3 种还原攻击（超分插值 / Richardson-Lucy 去模糊 / 边缘增强），测"还原后与原图"的 SSIM/PSNR
+- `/api/check` 响应新增 `region_details[].adversarial` 与 `adversarial_summary`（safe/warning/danger 判定 + 卖点文案）
+- 强度检测页新增「🧪 对抗还原测试」展示区（攻击结果表 + 抗还原判定）
+- 纯经典算法实现，无新依赖；接口预留接入 Real-ESRGAN 等真超分模型
+- ⚠️ 已知发现：当前不可逆算法对**低频均匀区域**（粗块）结构保留、可被还原（SSIM≈0.81）；对**细笔画文本**（证件/票据文字）有效（SSIM≈0.33）。已在测试中固化为回归用例

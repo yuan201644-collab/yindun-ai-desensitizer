@@ -17,6 +17,7 @@ import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 from app.core.config import AntiRestoreConfig
+from app.services.adversarial_service import AdversarialService
 
 
 class AntiRestoreService:
@@ -87,6 +88,9 @@ class AntiRestoreService:
             risk_level = "danger"
             suggestion = "⚠️ 高还原风险！建议立即更换为不可逆脱敏算法，增大处理强度"
 
+        # 6. 对抗还原测试 — 尝试还原手法，检验脱敏是否可逆
+        adversarial = AdversarialService.run_attacks(original_region, processed_region)
+
         return {
             "ssim": round(ssim_val, 4),
             "psnr": round(psnr_val, 2),
@@ -94,6 +98,7 @@ class AntiRestoreService:
             "risk_score": risk_score,
             "risk_level": risk_level,
             "suggestion": suggestion,
+            "adversarial": adversarial,
         }
 
     @staticmethod
@@ -145,12 +150,28 @@ class AntiRestoreService:
             global_level = "danger"
             global_msg = "🔴 脱敏强度不足，请重新处理"
 
+        # 对抗还原汇总：取各区域最坏判定
+        verdicts = [r.get("adversarial", {}).get("verdict", "safe") for r in region_results]
+        if "danger" in verdicts:
+            adv_verdict = "danger"
+            adv_msg = "🔴 存在可被还原的区域，请立即更换脱敏算法重新处理"
+        elif "warning" in verdicts:
+            adv_verdict = "warning"
+            adv_msg = "⚠️ 部分区域可被部分还原，建议加固"
+        else:
+            adv_verdict = "safe"
+            adv_msg = "✅ 还原攻击全部失败——即使经过超分/去模糊还原，仍无法恢复原始敏感信息"
+
         return {
             "global_risk_score": avg_risk,
             "global_risk_level": global_level,
             "global_message": global_msg,
             "region_details": region_results,
             "total_regions_checked": len(region_results),
+            "adversarial_summary": {
+                "verdict": adv_verdict,
+                "message": adv_msg,
+            },
         }
 
     # --- 内部方法 ---

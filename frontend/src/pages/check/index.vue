@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { BASE_URL } from '../../utils/api'
 
 const originalFile = ref<File | null>(null)
@@ -46,6 +46,7 @@ async function runCheck() {
 function reset() { originalFile.value = null; processedFile.value = null; originalPreview.value = ''; processedPreview.value = ''; result.value = null; error.value = '' }
 function riskLevelColor(level: string): string { if (level==='safe') return '#22c55e'; if (level==='warning') return '#ffaa00'; return '#ff4444' }
 function riskLabel(level: string): string { if (level==='safe') return '🟢 安全'; if (level==='warning') return '🟡 警告'; return '🔴 危险' }
+const advRegions = computed(() => (result.value?.region_details || []).filter((d: any) => d.adversarial?.attacks?.length))
 </script>
 
 <template>
@@ -57,6 +58,7 @@ function riskLabel(level: string): string { if (level==='safe') return '🟢 安
         <p>上传<strong>脱敏前</strong>和<strong>脱敏后</strong>的图片，系统通过计算两张图的差异来评估：你打的码有没有可能被 AI 还原？</p>
         <p style="margin-top:8px;">评分规则：<span style="color:#22c55e">0-30 安全</span> | <span style="color:#ffaa00">30-60 建议加固</span> | <span style="color:#ff4444">60+ 危险，请重新脱敏</span></p>
         <p style="color:#8888aa;font-size:11px;margin-top:6px;">检测维度：SSIM（结构相似度）、PSNR（信噪比）、纹理熵（信息残留量）</p>
+        <p style="color:#6c63ff;font-size:12px;margin-top:6px;">🧪 对抗还原测试：系统会尝试用超分/去模糊/边缘增强还原脱敏区域，验证"打了码就还原不了"</p>
       </div>
     </div>
     <div class="upload-dual" v-if="!result">
@@ -85,6 +87,33 @@ function riskLabel(level: string): string { if (level==='safe') return '🟢 安
           <span class="detail-suggestion">💡 {{ detail.suggestion }}</span>
         </div>
       </div>
+      <div class="adv-panel" v-if="result.adversarial_summary">
+        <h3 class="details-title">🧪 对抗还原测试（以 AI 测 AI）</h3>
+        <div class="adv-verdict" :style="{ borderLeftColor: riskLevelColor(result.adversarial_summary.verdict) }">
+          <span class="adv-label" :style="{ color: riskLevelColor(result.adversarial_summary.verdict) }">{{ riskLabel(result.adversarial_summary.verdict) }} · 抗还原判定</span>
+          <span class="adv-msg">{{ result.adversarial_summary.message }}</span>
+        </div>
+        <div v-if="advRegions.length">
+          <div v-for="(detail, i) in advRegions" :key="i" class="adv-region">
+            <div class="detail-header">
+              <span class="detail-index">区域 #{{ detail.region_index + 1 }}</span>
+              <span class="adv-region-verdict" :style="{ color: riskLevelColor(detail.adversarial!.verdict) }">{{ riskLabel(detail.adversarial!.verdict) }}</span>
+            </div>
+            <table class="adv-table">
+              <thead><tr><th>还原手法</th><th>还原后 SSIM</th><th>还原后 PSNR</th></tr></thead>
+              <tbody>
+                <tr v-for="(atk, j) in detail.adversarial!.attacks" :key="j">
+                  <td>{{ atk.name }}</td>
+                  <td>{{ atk.restored_ssim }}</td>
+                  <td>{{ atk.restored_psnr }} dB</td>
+                </tr>
+              </tbody>
+            </table>
+            <span class="detail-suggestion">💡 {{ detail.adversarial!.message }}</span>
+          </div>
+        </div>
+        <p class="adv-note">还原手法为经典算法（超分插值 / Richardson-Lucy 去模糊 / 边缘增强）；接口预留了接入 Real-ESRGAN 等真超分模型的扩展位。</p>
+      </div>
       <button class="btn btn-secondary" @click="reset">🔄 检测其他图片</button>
       <div class="reinforce-guide">
         <h4 class="guide-title">🔧 脱敏加固指南</h4>
@@ -95,7 +124,7 @@ function riskLabel(level: string): string { if (level==='safe') return '🟢 安
       </div>
     </div>
     <div v-if="error" class="error">{{ error }}</div>
-    <div class="footer-note"><p>检测引擎基于 SSIM/PSNR/纹理熵 综合分析，评估 AI 超分模型还原风险</p></div>
+    <div class="footer-note"><p>检测引擎基于 SSIM/PSNR/纹理熵 + 对抗还原测试（超分/去模糊/边缘增强），以还原手法检验脱敏不可逆性</p></div>
   </div>
 </template>
 
@@ -123,6 +152,17 @@ function riskLabel(level: string): string { if (level==='safe') return '🟢 安
 .detail-index { font-weight: 600; font-size: 14px; } .detail-risk { font-size: 13px; font-weight: 600; }
 .detail-metrics { display: flex; gap: 16px; margin: 6px 0; } .metric { font-size: 12px; color: #8888aa; font-family: monospace; }
 .detail-suggestion { font-size: 13px; color: #b0b0d0; margin-top: 6px; display: block; }
+.adv-panel { background: linear-gradient(135deg, #1a1a3e, #14142a); border: 1px solid #3a3a5a; border-radius: 12px; padding: 16px; margin: 16px 0; }
+.adv-verdict { display: flex; flex-direction: column; gap: 6px; background: #1a1a2e; border-left: 4px solid #3a3a5a; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.adv-label { font-size: 15px; font-weight: 700; }
+.adv-msg { font-size: 13px; color: #b0b0d0; line-height: 1.6; }
+.adv-region { background: #1a1a2e; border-radius: 10px; padding: 12px; margin: 10px 0; }
+.adv-region-verdict { font-size: 13px; font-weight: 600; }
+.adv-table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+.adv-table th, .adv-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #2a2a4a; color: #aaaacc; }
+.adv-table th { color: #6c63ff; font-weight: 600; }
+.adv-table td { font-family: monospace; }
+.adv-note { font-size: 11px; color: #6666aa; margin-top: 10px; line-height: 1.6; }
 .reinforce-guide { background: #1a1a2e; border-radius: 12px; padding: 16px; margin-top: 16px; }
 .guide-title { font-size: 16px; font-weight: 600; margin-bottom: 10px; } .guide-item { font-size: 13px; color: #aaaacc; padding: 3px 0; }
 .error { color: #ff4444; font-size: 13px; text-align: center; margin: 12px 0; }
