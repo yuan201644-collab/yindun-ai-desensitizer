@@ -5,6 +5,7 @@ import { useOCR } from '../../composables/useOCR'
 import { useDesensitize } from '../../composables/useDesensitize'
 import { applyDesensitize, drawImageToCanvas, canvasToBlob } from '../../utils/canvas'
 import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
+import { recognizeLocal } from '../../utils/localOCR'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -30,10 +31,16 @@ function onFileSelected(e: Event) {
 
 async function runOCR() {
   if (!uploadState.value.file || uploadState.value.status !== 'ready') return
+  ocrError.value = ''
   if (processingMode.value === 'cloud') {
     await ocrDetect(uploadState.value.file, 'full')
   } else {
-    ocrError.value = '本地OCR模式开发中，请使用云端增强模式'
+    try {
+      textRegions.value = await recognizeLocal(uploadState.value.file)
+      objectRegions.value = []
+    } catch (e: any) {
+      ocrError.value = '本地 OCR 失败：' + (e.message || '请检查网络或切换云端模式')
+    }
   }
   applyTemplateAutoSelect()
   activeTab.value = 'desensitize'
@@ -156,7 +163,7 @@ onUnmounted(() => { resetUpload() })
       <div class="mode-selector">
         <p class="mode-label">识别模式：</p>
         <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 云端增强（PaddleOCR GPU · 精准）</label>
-        <label class="mode-option"><input type="radio" v-model="processingMode" value="local" /> 本地处理（浏览器端 · 隐私优先）</label>
+        <label class="mode-option"><input type="radio" v-model="processingMode" value="local" /> 本地处理（Tesseract WASM · 图片不出设备）</label>
       </div>
       <div v-if="uploadState.status === 'error'" class="error-msg">⚠️ {{ uploadState.errorMessage }}</div>
     </div>
@@ -195,7 +202,7 @@ onUnmounted(() => { resetUpload() })
             <span class="region-label">{{ region.label }}</span>
           </div>
         </div>
-        <div v-if="ocrLoading" class="loading-overlay"><p class="loading-text">🔍 AI 正在识别敏感信息...</p></div>
+        <div v-if="ocrLoading" class="loading-overlay"><p class="loading-text">{{ processingMode === 'local' ? '🔍 本地识别中（首次需下载语言包，图片不出设备）...' : '🔍 AI 正在识别敏感信息...' }}</p></div>
       </div>
 
       <div class="control-panel">

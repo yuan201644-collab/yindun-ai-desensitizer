@@ -48,6 +48,13 @@
 - 图片页：选模板自动选区偏好类型 + 默认脱敏算法/强度（快递单默认不可逆高强）
 - 新增快递单示例文本，一键演示；模板逻辑有 vitest 覆盖
 
+### 方向② 本地 OCR 模式（端侧优先 / 隐私卖点）
+- 图片页"本地处理"模式从 stub 变为可用：Tesseract.js WASM 浏览器端 OCR（`chi_sim`+`eng`），**图片不出设备**
+- 新增 `localOCR.ts`：`linesToRegions` 纯函数（Tesseract line → 区域，与云端结构一致）+ `recognizeLocal`（懒加载、worker 复用）
+- `sensitivePatterns.ts` 新增 `OBJECT_LABELS` + `classifyText`（本地敏感分类，含对象标签，与后端对齐）
+- 本地模式无 YOLO 对象检测（端侧仅文本识别）；首次识别下载语言包 ~10-15MB
+- ⚠️ 诚实标注：本地 Tesseract 中文精度低于云端 PaddleOCR，用户可切云端
+
 ### 方向④ 识别层补强（Part A 语义标签 + Part B 自定义检测）
 - **Part A**：OCR 敏感区域带对象标签（🪪 证件 / 💳 银行卡 / 📦 快递单等），前端 overlay 显示；分类改为按类别优先级选最优，避免"地址"松散正则抢命中
 - **修复**：身份证号 / 快递单号 正则 `\b` 对中文相邻不成立（改用负向环视，同护照号轮）

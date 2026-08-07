@@ -144,3 +144,41 @@ export function applyMask(
 
   return text.slice(0, keepFirst) + maskChar.repeat(midLen) + text.slice(-keepLast)
 }
+
+/** 敏感对象语义标签（对齐后端 SENSITIVE_OBJECT_LABELS） */
+export const OBJECT_LABELS: Record<string, string> = {
+  identity: '🪪 证件',
+  contact: '📱 联系方式',
+  finance: '💳 银行卡',
+  location: '📍 地址',
+  logistics: '📦 快递单',
+  network: '🌐 网络',
+  social: '👤 社交账号',
+}
+
+export interface SensitiveMatch {
+  type: string
+  category: string
+  risk_level: 'high' | 'medium' | 'low'
+  matched_text: string
+  object_label: string
+}
+
+/** 对一段文本做敏感分类，返回第一个命中的类型（无命中返回 null） */
+export function classifyText(text: string): SensitiveMatch | null {
+  for (const p of DEFAULT_PATTERNS) {
+    // 去掉 g 标志，避免 RegExp.lastIndex 跨调用残留
+    const regex = new RegExp(p.pattern.source, p.pattern.flags.replace('g', ''))
+    const m = regex.exec(text)
+    if (m) {
+      return {
+        type: p.type,
+        category: p.category,
+        risk_level: p.riskLevel,
+        matched_text: m[0],
+        object_label: OBJECT_LABELS[p.category] || p.type,
+      }
+    }
+  }
+  return null
+}
