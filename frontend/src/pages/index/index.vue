@@ -20,12 +20,19 @@ const showHelp = ref(true)
 const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 
+function resetDetection() {
+  textRegions.value = []
+  objectRegions.value = []
+  ocrError.value = ''
+}
+
 function onFileSelected(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files?.[0]) {
     handleFile(target.files[0])
     activeTab.value = 'detect'
     clearRegions()
+    resetDetection()
   }
 }
 
@@ -102,7 +109,54 @@ function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolea
 }
 
 function startOver() {
-  resetUpload(); clearRegions(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'
+  resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'
+}
+
+// ---------- 按类别一键全选 ----------
+interface RegionRect { x: number; y: number; w: number; h: number }
+interface CategoryGroup { key: string; label: string; regions: RegionRect[]; total: number; selectedCount: number }
+
+const allRegions = computed<RegionRect[]>(() => [
+  ...textRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })),
+  ...objectRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })),
+])
+
+const allSelected = computed(() => allRegions.value.length > 0 && allRegions.value.every(r => isRegionSelected(r)))
+
+/** 按敏感类别/目标分组，统计各组的选中数 */
+const categoryGroups = computed<CategoryGroup[]>(() => {
+  const map = new Map<string, CategoryGroup>()
+  const push = (label: string, rect: RegionRect) => {
+    const key = label || '未识别'
+    if (!map.has(key)) map.set(key, { key, label: key, regions: [], total: 0, selectedCount: 0 })
+    const g = map.get(key)!
+    g.regions.push(rect); g.total++
+    if (isRegionSelected(rect)) g.selectedCount++
+  }
+  textRegions.value.forEach((r: any) =>
+    push(r.sensitive?.object_label || r.sensitive?.type || r.text || '文本', { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  objectRegions.value.forEach((r: any) =>
+    push(r.label || '目标', { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  return Array.from(map.values())
+})
+
+/** 一键全选/取消某类别 */
+function toggleCategory(group: CategoryGroup) {
+  const allOn = group.regions.every(r => isRegionSelected(r))
+  if (allOn) {
+    for (let i = selectedRegions.value.length - 1; i >= 0; i--) {
+      const r = selectedRegions.value[i]
+      if (group.regions.some(gr => gr.x === r.x && gr.y === r.y)) removeRegion(i)
+    }
+  } else {
+    group.regions.forEach(r => { if (!isRegionSelected(r)) addRegion(r) })
+  }
+}
+
+/** 全选 / 全不选 */
+function toggleAll() {
+  clearRegions()
+  if (!allSelected.value) allRegions.value.forEach(r => addRegion(r))
 }
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -206,12 +260,28 @@ onUnmounted(() => { resetUpload() })
       </div>
 
       <div class="control-panel">
+        <div class="image-actions" v-if="!isProcessed">
+          <button class="btn btn-small" @click="triggerUpload">🔄 更换图片</button>
+          <button class="btn btn-small btn-danger" @click="startOver">🗑️ 删除图片</button>
+        </div>
+
         <div v-if="!isProcessed && !ocrLoading && textRegions.length === 0 && objectRegions.length === 0">
           <button class="btn btn-primary" @click="runOCR" :disabled="ocrLoading">🔍 开始识别</button>
         </div>
 
         <div v-if="(textRegions.length > 0 || objectRegions.length > 0) && !isProcessed" class="regions-list">
           <p class="panel-title">检测到 {{ textRegions.length }} 处文本<span v-if="objectRegions.length"> + {{ objectRegions.length }} 个目标</span></p>
+          <div class="category-select" v-if="categoryGroups.length">
+            <p class="section-title">⚡ 按类别全选</p>
+            <div class="category-chips">
+              <span v-for="g in categoryGroups" :key="g.key" class="category-chip"
+                :class="{ all: g.total > 0 && g.selectedCount === g.total, partial: g.selectedCount > 0 && g.selectedCount < g.total }"
+                @click="toggleCategory(g)">{{ g.label }} {{ g.selectedCount }}/{{ g.total }}</span>
+            </div>
+            <div class="select-all-row">
+              <span class="select-all" @click="toggleAll">{{ allSelected ? '✖ 取消全选' : '✔ 全选' }}</span>
+            </div>
+          </div>
           <div class="template-select">
             <p class="section-title">🎯 场景模板</p>
             <div class="template-list">
@@ -294,6 +364,18 @@ onUnmounted(() => { resetUpload() })
 .template-chip { background: #2a2a4a; color: #aaaacc; font-size: 12px; padding: 5px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
 .template-chip.active { background: rgba(108,99,255,0.2); color: #6c63ff; border-color: #6c63ff; font-weight: 600; }
 .template-desc { font-size: 11px; color: #6666aa; margin: 6px 0 2px; line-height: 1.5; }
+.image-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.btn-small { flex: 1; padding: 8px 0; font-size: 13px; margin: 0; }
+.btn-danger { background: #3a1a1a; color: #ff6b6b; }
+.btn-danger:hover { background: #4a2020; }
+.category-select { margin-bottom: 4px; }
+.category-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.category-chip { background: #2a2a4a; color: #aaaacc; font-size: 12px; padding: 5px 10px; border-radius: 14px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+.category-chip:hover { border-color: #6c63ff; }
+.category-chip.all { background: rgba(108,99,255,0.22); color: #6c63ff; border-color: #6c63ff; font-weight: 600; }
+.category-chip.partial { border-color: #ffaa00; color: #ffaa00; }
+.select-all-row { margin-top: 6px; text-align: right; }
+.select-all { font-size: 12px; color: #6c63ff; cursor: pointer; }
 .method-option { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid #2a2a4a; gap: 2px; cursor: pointer; }
 .method-desc { font-size: 11px; color: #6666aa; }
 .selected-count { font-size: 13px; color: #b0b0d0; margin: 12px 0; }
