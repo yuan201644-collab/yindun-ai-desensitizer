@@ -7,7 +7,7 @@ import { applyDesensitize, drawImageToCanvas, canvasToBlob } from '../../utils/c
 import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
 import { recognizeLocal, detectNameColumn } from '../../utils/localOCR'
 import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
-import { setCheckImages } from '../../utils/checkTransfer'
+import { setCheckImages, setCheckRegions } from '../../utils/checkTransfer'
 import { getOcrEstimateMs, recordOcrDuration } from '../../utils/ocrStats'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
@@ -176,10 +176,11 @@ function backToSelect() {
   activeTab.value = 'desensitize'
 }
 
-// 跳转检测强度前，把原图/脱敏图写入中转，检测页自动带入（无需重新上传）
+// 跳转检测强度前，把原图/脱敏图 + 脱敏区域写入中转，检测页自动带入（无需重新上传）
 function prepareCheck() {
   if (originalImage.value && processedImage.value) {
     setCheckImages(originalImage.value, processedImage.value)
+    setCheckRegions(selectedRegions.value.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h })))
   }
 }
 

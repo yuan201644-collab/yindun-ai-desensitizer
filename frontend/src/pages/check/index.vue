@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { BASE_URL } from '../../utils/api'
-import { takeCheckImages } from '../../utils/checkTransfer'
+import { takeCheckImages, takeCheckRegions } from '../../utils/checkTransfer'
 
 const originalPreview = ref('')
 const processedPreview = ref('')
@@ -11,6 +11,8 @@ const error = ref('')
 // 图片数据源（原始 base64，无 data: 前缀）：手动上传或从脱敏页自动带入
 let originalB64 = ''
 let processedB64 = ''
+// 从脱敏页带入的脱敏区域（检测只量这些区域，否则整图对比会被未脱敏背景拉高）
+let checkRegions: Array<{ x: number; y: number; w: number; h: number }> = []
 
 function setImage(kind: 'original' | 'processed', file: File) {
   const reader = new FileReader()
@@ -31,7 +33,7 @@ async function runCheck() {
     const res = await fetch(BASE_URL + '/api/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ original_image_base64: originalB64, processed_image_base64: processedB64, regions: [] }),
+      body: JSON.stringify({ original_image_base64: originalB64, processed_image_base64: processedB64, regions: checkRegions.map(r => ({ rect: r })) }),
     })
     const data = await res.json()
     if (data.success) { result.value = data } else { error.value = data.error || '检测失败' }
@@ -47,9 +49,10 @@ function swapImages() {
   result.value = null; error.value = ''
 }
 
-// 从脱敏页跳转过来时自动带入原图/脱敏图
+// 从脱敏页跳转过来时自动带入原图/脱敏图 + 脱敏区域
 onMounted(() => {
   const t = takeCheckImages()
+  checkRegions = takeCheckRegions()
   if (t.original && t.processed) {
     originalB64 = t.original
     processedB64 = t.processed
