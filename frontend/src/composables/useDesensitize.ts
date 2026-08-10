@@ -42,6 +42,10 @@ export function useDesensitize() {
     isProcessed.value = true
   }
 
+  function resetProcessed() {
+    isProcessed.value = false
+  }
+
   return {
     selectedRegions,
     method,
@@ -52,5 +56,6 @@ export function useDesensitize() {
     removeRegion,
     clearRegions,
     markProcessed,
+    resetProcessed,
   }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { DEFAULT_PATTERNS, applyMask } from '../../utils/sensitivePatterns'
 import { SCENARIO_TEMPLATES, getTemplate, filterPatternsByTemplate } from '../../utils/scenarioTemplates'
 
@@ -11,6 +11,11 @@ const error = ref('')
 const previewMode = ref<'masked' | 'highlighted'>('highlighted')
 const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
+
+// P3 修复：切换场景模板时，若有文本则重新检测（避免保留旧模板的检测结果）
+watch(activeTemplate, () => {
+  if (inputText.value.trim()) detectLocally()
+})
 
 interface SpanResult { start: number; end: number; type: string; category: string; riskLevel: string; matchText: string; maskChar: string }
 const spans = ref<SpanResult[]>([])
@@ -55,7 +60,7 @@ async function copyMaskedText() {
   try { await navigator.clipboard.writeText(maskedText.value); alert('已复制到剪贴板') } catch { /* ignore */ }
 }
 
-function reset() { inputText.value = ''; maskedText.value = ''; spans.value = []; isProcessed.value = false; error.value = '' }
+function reset() { maskedText.value = ''; spans.value = []; isProcessed.value = false; error.value = '' }
 
 const sampleTexts = [
   '张三，身份证号110101199001011234，手机13800138000，住北京市朝阳区某某路100号。',
@@ -103,6 +108,7 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
       <textarea v-model="inputText" class="text-input" placeholder="在此粘贴聊天记录、订单信息、文档片段..." rows="10"></textarea>
       <div class="samples"><span class="samples-label">📋 快速粘贴示例：</span>
         <div class="sample-list"><span v-for="(s, i) in sampleTexts" :key="i" class="sample-item" @click="useSample(i)">示例{{ i+1 }}</span></div>
+        <p class="sample-tip">💡 示例1适「证件照/通用」· 示例2/4适「快递单」· 示例3适「通用」</p>
       </div>
       <div class="action-row"><span class="char-count">{{ inputText.length }} 字</span><button class="btn btn-primary" @click="runDesensitize" :disabled="!inputText.trim()||processing">{{ processing?'处理中...':'🔒 一键脱敏' }}</button></div>
       <div v-if="error" class="error">{{ error }}</div>
@@ -138,6 +144,7 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
 .template-desc { font-size: 11px; color: #6666aa; margin-top: 8px; }
 .text-input { width: 100%; background: #111122; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; color: #e0e0f0; font-size: 14px; line-height: 1.8; min-height: 200px; resize: vertical; box-sizing: border-box; }
 .samples { margin: 12px 0; } .samples-label { font-size: 12px; color: #6666aa; }
+.sample-tip { font-size: 11px; color: #8888aa; margin-top: 6px; }
 .sample-list { display: flex; gap: 8px; margin-top: 6px; }
 .sample-item { background: #2a2a4a; color: #aaaacc; font-size: 12px; padding: 4px 12px; border-radius: 6px; cursor: pointer; }
 .stats { display: flex; gap: 12px; margin-bottom: 16px; }

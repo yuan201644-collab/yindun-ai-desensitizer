@@ -44,6 +44,13 @@ async function runCheck() {
 }
 
 function reset() { originalFile.value = null; processedFile.value = null; originalPreview.value = ''; processedPreview.value = ''; result.value = null; error.value = '' }
+
+// P3 修复：交换原图/脱敏图（传反了不用重传）
+function swapImages() {
+  const f = originalFile.value; originalFile.value = processedFile.value; processedFile.value = f
+  const p = originalPreview.value; originalPreview.value = processedPreview.value; processedPreview.value = p
+  result.value = null; error.value = ''
+}
 function riskLevelColor(level: string): string { if (level==='safe') return '#22c55e'; if (level==='warning') return '#ffaa00'; return '#ff4444' }
 function riskLabel(level: string): string { if (level==='safe') return '🟢 安全'; if (level==='warning') return '🟡 警告'; return '🔴 危险' }
 const advRegions = computed(() => (result.value?.region_details || []).filter((d: any) => d.adversarial?.attacks?.length))
@@ -71,7 +78,11 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
         <img v-else :src="processedPreview" class="preview-img" />
       </div>
     </div>
-    <button v-if="!result && originalPreview && processedPreview" class="btn btn-primary" @click="runCheck" :disabled="checking">{{ checking ? '🔍 正在检测中...' : '🔍 开始强度检测' }}</button>
+    <div v-if="!result && (!!originalPreview !== !!processedPreview)" class="hint-msg">⚠️ 需上传<strong>原图</strong>和<strong>脱敏后图</strong>两张才能检测</div>
+    <div v-if="!result && originalPreview && processedPreview" class="action-row">
+      <button class="btn btn-primary" @click="runCheck" :disabled="checking">{{ checking ? '🔍 正在检测中...' : '🔍 开始强度检测' }}</button>
+      <button class="btn btn-secondary" @click="swapImages">⇄ 交换两张图</button>
+    </div>
     <div class="result-panel" v-if="result">
       <div class="score-card" :style="{ borderColor: riskLevelColor(result.global_risk_level) }">
         <span class="score-num" :style="{ color: riskLevelColor(result.global_risk_level) }">{{ result.global_risk_score }}</span>
@@ -143,6 +154,9 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
 .btn { display: block; width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; margin: 12px 0; }
 .btn-primary { background: #6c63ff; color: #fff; } .btn-secondary { background: #2a2a4a; color: #c0c0e0; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.hint-msg { color: #ffaa00; font-size: 13px; margin: 12px 0; text-align: center; }
+.action-row { display: flex; gap: 8px; margin: 12px 0; }
+.action-row .btn { width: auto; margin: 0; flex: 1; }
 .score-card { text-align: center; padding: 32px; border: 3px solid #3a3a5a; border-radius: 16px; background: #1a1a2e; margin: 16px 0; }
 .score-num { font-size: 64px; font-weight: 800; display: block; } .score-label { color: #8888aa; font-size: 13px; display: block; margin: 4px 0; }
 .score-level { font-size: 20px; font-weight: 700; display: block; margin: 8px 0; } .score-msg { color: #aaaacc; font-size: 14px; margin-top: 8px; display: block; }

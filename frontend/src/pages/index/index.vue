@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useImageUpload } from '../../composables/useImageUpload'
 import { useOCR } from '../../composables/useOCR'
 import { useDesensitize } from '../../composables/useDesensitize'
@@ -9,7 +9,7 @@ import { recognizeLocal } from '../../utils/localOCR'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
-const { selectedRegions, method, intensity, isProcessed, methodOptions, addRegion, removeRegion, clearRegions, markProcessed } = useDesensitize()
+const { selectedRegions, method, intensity, isProcessed, methodOptions, addRegion, removeRegion, clearRegions, markProcessed, resetProcessed } = useDesensitize()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const originalImage = ref('')
@@ -19,21 +19,31 @@ const activeTab = ref<'detect' | 'desensitize' | 'result'>('detect')
 const showHelp = ref(true)
 const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
+const detectEmpty = ref(false)
 
 function resetDetection() {
   textRegions.value = []
   objectRegions.value = []
   ocrError.value = ''
+  detectEmpty.value = false
+}
+
+function applyFile(file: File) {
+  handleFile(file)
+  activeTab.value = 'detect'
+  clearRegions()
+  resetDetection()
 }
 
 function onFileSelected(e: Event) {
   const target = e.target as HTMLInputElement
-  if (target.files?.[0]) {
-    handleFile(target.files[0])
-    activeTab.value = 'detect'
-    clearRegions()
-    resetDetection()
-  }
+  if (target.files?.[0]) applyFile(target.files[0])
+}
+
+// P2 修复：拖拽上传（与点击上传走同一入口）
+function onDrop(e: DragEvent) {
+  const file = e.dataTransfer?.files?.[0]
+  if (file) applyFile(file)
 }
 
 async function runOCR() {
@@ -49,6 +59,7 @@ async function runOCR() {
       ocrError.value = '本地 OCR 失败：' + (e.message || '请检查网络或切换云端模式')
     }
   }
+  detectEmpty.value = textRegions.value.length === 0 && objectRegions.value.length === 0
   applyTemplateAutoSelect()
   activeTab.value = 'desensitize'
 }
@@ -76,6 +87,11 @@ function onTemplateChange() {
   if (t.defaultIntensity) intensity.value = t.defaultIntensity
   if (textRegions.value.length || objectRegions.value.length) applyTemplateAutoSelect()
 }
+
+// P1 修复：切换脱敏方法时，同步到所有已选区域（避免"改了方法实际还是旧算法"）
+watch(method, (m) => {
+  selectedRegions.value.forEach(r => { r.method = m })
+})
 
 async function runDesensitize() {
   if (!canvasRef.value || selectedRegions.value.length === 0) return
@@ -110,6 +126,12 @@ function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolea
 
 function startOver() {
   resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'
+}
+
+// P3 修复：脱敏后可返回选区调整（回到原图预览，保留选区）
+function backToSelect() {
+  resetProcessed()
+  activeTab.value = 'desensitize'
 }
 
 // ---------- 按类别一键全选 ----------
@@ -208,7 +230,7 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 上传区 -->
     <div class="upload-section" v-if="uploadState.status !== 'ready'">
-      <div class="upload-zone" @click="triggerUpload">
+      <div class="upload-zone" @click="triggerUpload" @dragover.prevent @drop.prevent="onDrop">
         <span class="upload-icon">📤</span>
         <p class="upload-text">点击上传或拖拽图片到此处</p>
         <p class="upload-hint">支持 PNG / JPG / WebP，最大 20MB</p>
@@ -216,7 +238,7 @@ onUnmounted(() => { resetUpload() })
       <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" style="display:none" @change="onFileSelected" />
       <div class="mode-selector">
         <p class="mode-label">识别模式：</p>
-        <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 云端增强（PaddleOCR GPU · 精准）</label>
+        <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 云端增强（PaddleOCR · 精准）</label>
         <label class="mode-option"><input type="radio" v-model="processingMode" value="local" /> 本地处理（Tesseract WASM · 图片不出设备）</label>
       </div>
       <div v-if="uploadState.status === 'error'" class="error-msg">⚠️ {{ uploadState.errorMessage }}</div>
@@ -266,7 +288,8 @@ onUnmounted(() => { resetUpload() })
         </div>
 
         <div v-if="!isProcessed && !ocrLoading && textRegions.length === 0 && objectRegions.length === 0">
-          <button class="btn btn-primary" @click="runOCR" :disabled="ocrLoading">🔍 开始识别</button>
+          <button v-if="!detectEmpty" class="btn btn-primary" @click="runOCR" :disabled="ocrLoading">🔍 开始识别</button>
+          <div v-else class="info-msg">😕 未检测到敏感信息，可更换图片、切换识别模式或换一张更清晰的图</div>
         </div>
 
         <div v-if="(textRegions.length > 0 || objectRegions.length > 0) && !isProcessed" class="regions-list">
@@ -309,6 +332,7 @@ onUnmounted(() => { resetUpload() })
           <p class="success-msg">✅ 脱敏完成</p>
           <p class="result-info">共处理 {{ selectedRegions.length }} 处敏感信息</p>
           <button class="btn btn-primary" @click="downloadImage">💾 下载图片</button>
+          <button class="btn btn-secondary" @click="backToSelect">↩️ 返回选区调整</button>
           <button class="btn btn-secondary" @click="startOver">🔄 重新处理</button>
           <div class="check-link">
             <span>还不够放心？</span>
@@ -376,6 +400,15 @@ onUnmounted(() => { resetUpload() })
 .category-chip.partial { border-color: #ffaa00; color: #ffaa00; }
 .select-all-row { margin-top: 6px; text-align: right; }
 .select-all { font-size: 12px; color: #6c63ff; cursor: pointer; }
+.info-msg { color: #6c63ff; font-size: 13px; background: rgba(108,99,255,0.1); padding: 10px; border-radius: 8px; margin-top: 8px; }
+
+/* P3 修复：移动端响应式 */
+@media (max-width: 768px) {
+  .workspace { flex-direction: column; }
+  .control-panel { width: 100%; }
+  .image-panel { min-height: 220px; }
+  .steps .step-line { width: 30px; }
+}
 .method-option { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid #2a2a4a; gap: 2px; cursor: pointer; }
 .method-desc { font-size: 11px; color: #6666aa; }
 .selected-count { font-size: 13px; color: #b0b0d0; margin: 12px 0; }
