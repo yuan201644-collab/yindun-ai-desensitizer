@@ -151,7 +151,10 @@ const allRegions = computed<RegionRect[]>(() => [
 
 const allSelected = computed(() => allRegions.value.length > 0 && allRegions.value.every(r => isRegionSelected(r)))
 
-/** 按敏感类别/目标分组，统计各组的选中数 */
+/** 相同文字出现 >=N 次 → 创建该图片专属的"重复文字分类"（如名单里的学院名/性别列） */
+const RECURRING_MIN = 3
+
+/** 按敏感类别/目标分组 + 重复文字创建图片专属分类，统计各组的选中数 */
 const categoryGroups = computed<CategoryGroup[]>(() => {
   const map = new Map<string, CategoryGroup>()
   const push = (label: string, rect: RegionRect) => {
@@ -161,13 +164,26 @@ const categoryGroups = computed<CategoryGroup[]>(() => {
     g.regions.push(rect); g.total++
     if (isRegionSelected(rect)) g.selectedCount++
   }
+  // 第一遍：敏感类型入类别；非敏感文本统计出现次数
+  const textCounts = new Map<string, number>()
   textRegions.value.forEach((r: any) => {
-    // 只把识别出敏感类型的区域加入分类（细碎文本不进 chips，仍可图上单独点选）
     const s = r.sensitive
-    if (s) push(s.object_label || s.type, { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
+    const rect = { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }
+    if (s) {
+      push(s.object_label || s.type, rect)
+    } else if (r.text) {
+      textCounts.set(r.text, (textCounts.get(r.text) || 0) + 1)
+    }
   })
   objectRegions.value.forEach((r: any) =>
     push(r.label || '目标', { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  // 第二遍：出现 >=N 次的相同文字 → 图片专属分类（📌 标记）
+  textRegions.value.forEach((r: any) => {
+    const s = r.sensitive
+    if (!s && r.text && (textCounts.get(r.text) || 0) >= RECURRING_MIN) {
+      push(`📌 ${r.text}`, { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
+    }
+  })
   return Array.from(map.values())
 })
 

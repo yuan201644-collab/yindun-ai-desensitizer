@@ -98,7 +98,11 @@ describe('isMeaningfulText 过滤表格边框/符号', () => {
     expect(isMeaningfulText('|')).toBe(false)
     expect(isMeaningfulText('[|')).toBe(false)
     expect(isMeaningfulText('——')).toBe(false)
-    expect(isMeaningfulText('、')).toBe(false)
+    expect(isMeaningfulText('…')).toBe(false)
+  })
+  it('中文标点保留（作为分隔符）', () => {
+    expect(isMeaningfulText('、')).toBe(true)
+    expect(isMeaningfulText('，')).toBe(true)
   })
   it('含中英文/数字的文本保留', () => {
     expect(isMeaningfulText('13800138000')).toBe(true)
