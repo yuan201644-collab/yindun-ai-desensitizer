@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { DEFAULT_PATTERNS, applyMask } from '../../utils/sensitivePatterns'
+import { DEFAULT_PATTERNS, applyMask, matchCustomWords } from '../../utils/sensitivePatterns'
 import { SCENARIO_TEMPLATES, getTemplate, filterPatternsByTemplate } from '../../utils/scenarioTemplates'
 
 const inputText = ref('')
+// 自定义敏感词（换行/逗号分隔），不受场景模板 activeTypes 过滤影响，用户显式指定的词恒生效
+const customWordsText = ref('')
 const maskedText = ref('')
 const isProcessed = ref(false)
 const processing = ref(false)
@@ -36,6 +38,15 @@ function detectLocally() {
       }
     }
   }
+  // 自定义敏感词：解析（换行/逗号分隔）后调用 matchCustomWords，
+  // 命中加入 spans（type='自定义'、high 风险、█ 全掩码），恒生效、不受模板 activeTypes 过滤影响
+  const customWords = customWordsText.value.split(/[\n,，、]+/).map(w => w.trim()).filter(Boolean)
+  for (const cm of matchCustomWords(text, customWords)) {
+    const isOverlapping = spans.value.some(s => cm.start < s.end && cm.end > s.start)
+    if (!isOverlapping) {
+      spans.value.push({ start: cm.start, end: cm.end, type: cm.type, category: 'custom', riskLevel: 'high', matchText: cm.text, maskChar: '█' })
+    }
+  }
   spans.value.sort((a, b) => a.start - b.start)
   applyLocalMask()
 }
@@ -45,7 +56,10 @@ function applyLocalMask() {
   const sorted = [...spans.value].sort((a, b) => b.start - a.start)
   for (const span of sorted) {
     const mp = DEFAULT_PATTERNS.find(p => p.type === span.type)
-    const masked = applyMask(span.matchText, mp?.keepFirst ?? 0, mp?.keepLast ?? 0, mp?.maskChar ?? '*')
+    const maskChar = span.maskChar || mp?.maskChar || '*'
+    const masked = mp
+      ? applyMask(span.matchText, mp.keepFirst, mp.keepLast, maskChar)
+      : maskChar.repeat(span.matchText.length) // 自定义词在模式库中找不到 mp → 全掩码（保留 0 前 0 后）
     result = result.slice(0, span.start) + masked + result.slice(span.end)
   }
   maskedText.value = result
@@ -106,6 +120,10 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
         <p class="template-desc">{{ activeTemplateObj.desc }}</p>
       </div>
       <textarea v-model="inputText" class="text-input" placeholder="在此粘贴聊天记录、订单信息、文档片段..." rows="10"></textarea>
+      <div class="custom-words-box">
+        <p class="custom-words-label">✏️ 自定义敏感词（恒生效，不受场景模板影响）：</p>
+        <textarea v-model="customWordsText" class="text-input custom-words-input" placeholder="输入自定义敏感词，换行或逗号分隔，如：雷霆项目，机密代号，王小明" rows="2"></textarea>
+      </div>
       <div class="samples"><span class="samples-label">📋 快速粘贴示例：</span>
         <div class="sample-list"><span v-for="(s, i) in sampleTexts" :key="i" class="sample-item chip-pop" @click="useSample(i)">示例{{ i+1 }}</span></div>
         <p class="sample-tip">💡 示例1适「证件照/通用」· 示例2/4适「快递单」· 示例3适「通用」</p>
@@ -143,6 +161,9 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
 .template-chip.active { background: rgba(108,99,255,0.2); color: #6c63ff; border-color: #6c63ff; font-weight: 600; }
 .template-desc { font-size: 11px; color: #6666aa; margin-top: 8px; }
 .text-input { width: 100%; background: #111122; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; color: #e0e0f0; font-size: 14px; line-height: 1.8; min-height: 200px; resize: vertical; box-sizing: border-box; }
+.custom-words-box { margin-top: 12px; }
+.custom-words-label { font-size: 12px; color: #8888aa; margin-bottom: 6px; }
+.custom-words-input { min-height: 64px; }
 .samples { margin: 12px 0; } .samples-label { font-size: 12px; color: #6666aa; }
 .sample-tip { font-size: 11px; color: #8888aa; margin-top: 6px; }
 .sample-list { display: flex; gap: 8px; margin-top: 6px; }

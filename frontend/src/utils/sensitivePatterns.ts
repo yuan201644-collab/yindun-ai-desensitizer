@@ -182,3 +182,36 @@ export function classifyText(text: string): SensitiveMatch | null {
   }
   return null
 }
+
+export interface CustomWordMatch { start: number; end: number; text: string; type: string }
+
+/**
+ * 在文本中查找自定义敏感词的所有出现（去重、可单测）
+ * - 逐词 indexOf 扫描，跳过与已命中词重叠的位置（避免同一处重复框选）
+ * - 空词/空白词忽略
+ * - 自定义词不受内置场景模板 activeTypes 过滤影响（用户显式指定的词恒生效）
+ */
+export function matchCustomWords(text: string, customWords: string[]): CustomWordMatch[] {
+  const results: CustomWordMatch[] = []
+  for (const rawWord of customWords) {
+    const word = rawWord.trim()
+    // 空词/空白词忽略
+    if (!word) continue
+    let fromIndex = 0
+    while (fromIndex <= text.length) {
+      const idx = text.indexOf(word, fromIndex)
+      if (idx === -1) break
+      const start = idx
+      const end = idx + word.length
+      // 跳过与已命中词重叠的位置（避免同一处重复框选）
+      const isOverlapping = results.some(r => start < r.end && end > r.start)
+      if (!isOverlapping) {
+        results.push({ start, end, text: word, type: '自定义' })
+      }
+      // 跳过当前命中，从 end 继续扫描，避免同一词重复命中
+      fromIndex = end
+    }
+  }
+  results.sort((a, b) => a.start - b.start)
+  return results
+}
