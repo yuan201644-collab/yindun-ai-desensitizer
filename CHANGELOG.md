@@ -60,6 +60,12 @@
 - 检测后按敏感类别分组（🪪证件/📱联系方式/📦快递单…）显示 chips，**一键全选/取消该类**，含选中数；右上「✔ 全选 / ✖ 取消全选」
 - 类别 chips 三态：全选(蓝) / 部分(黄) / 未选(灰)
 
+### 本地 OCR 修复：资源本地打包（不依赖 CDN）
+- 修复本地模式不可用：tesseract.js 默认从 cdn.jsdelivr.net 下载 worker/核心/语言包，国内访问常失败
+- 现将全部资源本地打包到 `frontend/public/tesseract/`（worker + core 3 变体 + chi_sim/eng 语言包，约 24MB），浏览器零 CDN 依赖，离线可用
+- `localOCR.ts` 的 createWorker 显式指向本地路径；Node 实测识别通过
+- 注：本目录体积较大（24MB），为"端侧优先/离线可用"的必要成本
+
 ### 方向② 本地 OCR 模式（端侧优先 / 隐私卖点）
 - 图片页"本地处理"模式从 stub 变为可用：Tesseract.js WASM 浏览器端 OCR（`chi_sim`+`eng`），**图片不出设备**
 - 新增 `localOCR.ts`：`linesToRegions` 纯函数（Tesseract line → 区域，与云端结构一致）+ `recognizeLocal`（懒加载、worker 复用）

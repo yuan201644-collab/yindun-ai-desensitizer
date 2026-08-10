@@ -49,11 +49,16 @@ export function linesToRegions(lines: TesseractLine[]): LocalOCRRegion[] {
 
 let _workerPromise: Promise<any> | null = null
 
-/** 懒加载 Tesseract worker（单例复用），语言：中文 + 英文 */
+/** 懒加载 Tesseract worker（单例复用），语言：中文 + 英文
+ *  资源本地打包在 public/tesseract/，不依赖 CDN（国内 jsdelivr 常不可达） */
 async function getWorker(): Promise<any> {
   if (!_workerPromise) {
     const Tesseract = (await import('tesseract.js')).default
-    _workerPromise = Tesseract.createWorker(['eng', 'chi_sim'])
+    _workerPromise = Tesseract.createWorker(['eng', 'chi_sim'], 1, {
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract/core/',
+      langPath: '/tesseract/tessdata/',
+    })
   }
   return _workerPromise
 }
