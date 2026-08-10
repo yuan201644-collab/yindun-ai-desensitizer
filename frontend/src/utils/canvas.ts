@@ -36,13 +36,16 @@ export function applyDesensitize(
 
   switch (method) {
     case 'pixelate':
-      pixelateRegion(imageData, w, h, Math.max(4, Math.floor(12 * intensity)))
+      // 块尺寸自适应区域尺寸：小区域 → 块≈整个区域；同时保留 intensity 缩放
+      pixelateRegion(imageData, w, h, Math.max(Math.min(w, h), Math.floor(12 * intensity)))
       break
     case 'gaussian':
-      gaussianRegion(imageData, w, h, 5 + 20 * intensity)
+      // sigma 自适应区域尺寸：小区域 → 强模糊；同时保留 intensity 缩放
+      gaussianRegion(imageData, w, h, Math.max(Math.min(w, h) * 0.4, 5 + 20 * intensity))
       break
     case 'irreversible':
-      irreversibleRegion(imageData, w, h, Math.max(2, Math.floor(6 * intensity)))
+      // patch 自适应区域尺寸：小区域 → 整个区域一个 patch；同时保留 intensity 缩放
+      irreversibleRegion(imageData, w, h, Math.max(Math.min(w, h), Math.floor(6 * intensity)))
       break
   }
 

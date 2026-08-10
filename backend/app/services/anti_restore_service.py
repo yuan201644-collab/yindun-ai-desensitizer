@@ -74,7 +74,7 @@ class AntiRestoreService:
         # 4. 综合风险评估
         # SSIM 高 → 结构保留多 → 可还原风险高
         # PSNR 高 → 像素差异小 → 可还原风险高
-        # 熵低 → 信息残留多 → 可还原风险高
+        # 熵高 → 仍有余留纹理/结构 → 可还原风险高（熵低=均匀=脱敏彻底 → 安全）
         risk_score = AntiRestoreService._calc_risk_score(ssim_val, psnr_val, entropy)
 
         # 5. 风险等级
@@ -198,8 +198,8 @@ class AntiRestoreService:
         ssim_risk = ssim_val * 100
         # PSNR 贡献：高于阈值说明保留太多信息
         psnr_risk = max(0, (psnr_val / 50.0) * 100)
-        # 熵贡献：越低越危险
-        entropy_risk = max(0, (1.0 - entropy / 8.0) * 100)
+        # 熵贡献：熵高(仍有余留纹理/结构) → 危险；熵低(均匀=脱敏彻底) → 安全
+        entropy_risk = max(0, (entropy / 8.0) * 100)
 
         # 加权综合 (SSIM 权重最高 — 结构信息最关键)
         score = ssim_risk * 0.5 + psnr_risk * 0.25 + entropy_risk * 0.25

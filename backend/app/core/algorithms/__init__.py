@@ -86,7 +86,8 @@ class PixelateDesensitizer(BaseDesensitizer):
             return image
 
         roi = image[y:y+h, x:x+w].copy()
-        bs = kwargs.get("block_size", self.block_size)
+        # 粒度自适应区域尺寸：小区域 → 粒度≈整个区域 → 深色像素弥散、字形消失
+        bs = kwargs.get("block_size", max(self.block_size, min(w, h)))
 
         # 降采样 → 升采样 (信息丢失过程)
         small_h, small_w = max(1, h // bs), max(1, w // bs)
@@ -128,7 +129,8 @@ class GaussianDesensitizer(BaseDesensitizer):
             return image
 
         roi = image[y:y+h, x:x+w].copy()
-        sigma = kwargs.get("sigma", self.sigma)
+        # sigma 自适应区域尺寸：小区域 → 强模糊弥散字形
+        sigma = kwargs.get("sigma", max(self.sigma, min(w, h) * 0.5))
         ni = kwargs.get("noise_intensity", self.noise_intensity)
 
         # 多轮高斯模糊（不同 sigma 叠加 → 去模糊模型更难还原）
@@ -185,7 +187,8 @@ class IrreversibleDesensitizer(BaseDesensitizer):
             return image
 
         roi = image[y:y+h, x:x+w].copy()
-        ps = kwargs.get("patch_size", self.patch_size)
+        # patch 自适应区域尺寸：小区域 → 整个区域一个 patch → 重排+注入彻底打散
+        ps = kwargs.get("patch_size", max(self.patch_size, min(w, h)))
         rounds = kwargs.get("rounds", self.rounds)
         seed = self._generate_seed((x, y))
 

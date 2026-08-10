@@ -46,16 +46,15 @@ def test_strong_irreversible_cannot_restore():
     assert len(res["attacks"]) == 3
 
 
-def test_adversarial_catches_weak_desensitization():
-    """回归测试（记录已知弱点）：低频粗条 + 当前不可逆算法 → 结构保留 → danger。
-    算法加固后此断言应翻转为 safe。"""
+def test_strengthened_irreversible_destroys_low_freq():
+    """修复验证：区域级强化后，低频粗条也被彻底打散 → 不可还原 → safe（原"弱点"回归翻转）。"""
     img = _make_structured_image()
     r = _region()
     proc = IrreversibleDesensitizer(patch_size=4, rounds=3).apply(img, r)
     orig_roi, proc_roi = _rois(img, proc, r)
     res = AdversarialService.run_attacks(orig_roi, proc_roi)
-    assert res["verdict"] == "danger"
-    assert res["max_restored_ssim"] > 0.70
+    assert res["verdict"] == "safe"
+    assert res["max_restored_ssim"] <= 0.45
 
 
 def test_deconv_recovers_mild_blur_better_than_destroyed():
