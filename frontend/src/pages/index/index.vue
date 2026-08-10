@@ -223,12 +223,12 @@ onUnmounted(() => { resetUpload() })
 <template>
   <div class="page">
     <div class="hero">
-      <h1 class="hero-title">🛡️ 「隐盾」图片智能脱敏</h1>
-      <p class="hero-sub">上传图片 → 自动识别敏感信息 → 一键脱敏 → 安全分享</p>
+      <h1 class="hero-title fade-up">🛡️ 「隐盾」图片智能脱敏</h1>
+      <p class="hero-sub fade-up" style="animation-delay:0.08s">上传图片 → 自动识别敏感信息 → 一键脱敏 → 安全分享</p>
     </div>
 
     <!-- 使用说明 -->
-    <div class="help-card" v-if="showHelp">
+    <div class="help-card fade-in" v-if="showHelp">
       <div class="help-header" @click="showHelp = false">
         <span>📖 怎么用？</span>
         <button class="help-close">✕</button>
@@ -247,7 +247,7 @@ onUnmounted(() => { resetUpload() })
     </div>
 
     <!-- 步骤指示器 -->
-    <div class="steps">
+    <div class="steps fade-in">
       <div class="step" :class="{ active: activeTab === 'detect', done: activeTab !== 'detect' }">
         <span class="step-num">1</span><span class="step-label">上传图片</span>
       </div>
@@ -263,7 +263,7 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 上传区 -->
     <div class="upload-section" v-if="uploadState.status !== 'ready'">
-      <div class="upload-zone" @click="triggerUpload" @dragover.prevent @drop.prevent="onDrop">
+      <div class="upload-zone scale-in" @click="triggerUpload" @dragover.prevent @drop.prevent="onDrop">
         <span class="upload-icon">📤</span>
         <p class="upload-text">点击上传或拖拽图片到此处</p>
         <p class="upload-hint">支持 PNG / JPG / WebP，最大 20MB</p>
@@ -281,7 +281,7 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 工作区 -->
     <div class="workspace" v-if="uploadState.status === 'ready'">
-      <div class="image-panel">
+      <div class="image-panel fade-in">
         <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
         <img v-show="!isProcessed" :src="uploadState.previewUrl" class="preview-image" />
         <div v-if="!isProcessed && (textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
@@ -291,6 +291,7 @@ onUnmounted(() => { resetUpload() })
               'risk-medium': region.sensitive?.risk_level === 'medium',
               'risk-low': region.sensitive?.risk_level === 'low',
               selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}),
+              'region-selected-anim': isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}),
             }"
             :style="{
               left: (region.rect.x / uploadState.width * 100) + '%',
@@ -302,7 +303,7 @@ onUnmounted(() => { resetUpload() })
             <span class="region-label">{{ region.sensitive?.object_label || region.sensitive?.type || region.text }}</span>
           </div>
           <div v-for="(region, i) in objectRegions" :key="'o'+i" class="region-box object-region"
-            :class="{ selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}) }"
+            :class="{ selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}), 'region-selected-anim': isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}) }"
             :style="{
               left: (region.rect.x / uploadState.width * 100) + '%',
               top: (region.rect.y / uploadState.height * 100) + '%',
@@ -313,11 +314,11 @@ onUnmounted(() => { resetUpload() })
             <span class="region-label">{{ region.label }}</span>
           </div>
         </div>
-        <div v-if="ocrLoading" class="loading-overlay"><p class="loading-text">{{ processingMode === 'local' ? '🔍 本地识别中（首次需下载语言包，图片不出设备）...' : '🔍 AI 正在识别敏感信息...' }}</p></div>
+        <div v-if="ocrLoading" class="loading-overlay fade-in"><p class="loading-text">{{ processingMode === 'local' ? '🔍 本地识别中（首次需下载语言包，图片不出设备）...' : '🔍 AI 正在识别敏感信息...' }}</p></div>
       </div>
 
-      <div class="control-panel">
-        <div v-if="complexity && !isProcessed" class="complexity-banner" :class="complexity.level">
+      <div class="control-panel fade-in">
+        <div v-if="complexity && !isProcessed" class="complexity-banner fade-in" :class="complexity.level">
           <span class="cb-text">{{ complexity.reason }}</span>
           <button v-if="complexity.level !== 'simple' && processingMode === 'local'" class="cb-btn" @click="processingMode = 'cloud'">改用云端</button>
           <span v-else-if="complexity.level === 'simple'" class="cb-ok">✓ 两种模式都可用</span>
@@ -337,7 +338,7 @@ onUnmounted(() => { resetUpload() })
           <div class="category-select" v-if="categoryGroups.length">
             <p class="section-title">⚡ 按类别全选</p>
             <div class="category-chips">
-              <span v-for="g in categoryGroups" :key="g.key" class="category-chip"
+              <span v-for="g in categoryGroups" :key="g.key" class="category-chip chip-pop"
                 :class="{ all: g.total > 0 && g.selectedCount === g.total, partial: g.selectedCount > 0 && g.selectedCount < g.total }"
                 @click="toggleCategory(g)">{{ g.label }} {{ g.selectedCount }}/{{ g.total }}</span>
             </div>
@@ -348,7 +349,7 @@ onUnmounted(() => { resetUpload() })
           <div class="template-select">
             <p class="section-title">🎯 场景模板</p>
             <div class="template-list">
-              <span v-for="t in SCENARIO_TEMPLATES" :key="t.id" class="template-chip" :class="{ active: activeTemplate === t.id }" :title="t.desc" @click="activeTemplate = t.id; onTemplateChange()">{{ t.icon }} {{ t.name }}</span>
+              <span v-for="t in SCENARIO_TEMPLATES" :key="t.id" class="template-chip chip-pop" :class="{ active: activeTemplate === t.id }" :title="t.desc" @click="activeTemplate = t.id; onTemplateChange()">{{ t.icon }} {{ t.name }}</span>
             </div>
             <p class="template-desc">{{ activeTemplateObj.desc }}</p>
           </div>
@@ -368,7 +369,7 @@ onUnmounted(() => { resetUpload() })
           <button class="btn btn-warn" @click="runDesensitize" :disabled="selectedRegions.length === 0">🔒 应用脱敏 ({{ selectedRegions.length }} 处)</button>
         </div>
 
-        <div v-if="isProcessed" class="result-panel">
+        <div v-if="isProcessed" class="result-panel scale-in">
           <p class="success-msg">✅ 脱敏完成</p>
           <p class="result-info">共处理 {{ selectedRegions.length }} 处敏感信息</p>
           <button class="btn btn-primary" @click="downloadImage">💾 下载图片</button>

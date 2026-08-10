@@ -88,8 +88,8 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
 
 <template>
   <div class="page">
-    <div class="hero"><h1 class="hero-title">📝 文本智能脱敏</h1><p class="hero-sub">粘贴文本，AI 自动识别并脱敏敏感信息</p></div>
-    <div class="help-card">
+    <div class="hero"><h1 class="hero-title fade-up">📝 文本智能脱敏</h1><p class="hero-sub fade-up" style="animation-delay:0.08s">粘贴文本，AI 自动识别并脱敏敏感信息</p></div>
+    <div class="help-card fade-in">
       <div class="help-header"><span>📖 使用说明</span></div>
       <div class="help-body">
         <p>粘贴聊天记录、订单信息或文档 → 自动 <span style="color:#ff4444">红色</span>=高风险 <span style="color:#ffaa00">黄色</span>=中风险 → 一键打码 → 复制使用</p>
@@ -101,19 +101,19 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
       <div class="template-select">
         <p class="template-label">🎯 场景模板：</p>
         <div class="template-list">
-          <span v-for="t in SCENARIO_TEMPLATES" :key="t.id" class="template-chip" :class="{ active: activeTemplate === t.id }" :title="t.desc" @click="activeTemplate = t.id">{{ t.icon }} {{ t.name }}</span>
+          <span v-for="t in SCENARIO_TEMPLATES" :key="t.id" class="template-chip chip-pop" :class="{ active: activeTemplate === t.id }" :title="t.desc" @click="activeTemplate = t.id">{{ t.icon }} {{ t.name }}</span>
         </div>
         <p class="template-desc">{{ activeTemplateObj.desc }}</p>
       </div>
       <textarea v-model="inputText" class="text-input" placeholder="在此粘贴聊天记录、订单信息、文档片段..." rows="10"></textarea>
       <div class="samples"><span class="samples-label">📋 快速粘贴示例：</span>
-        <div class="sample-list"><span v-for="(s, i) in sampleTexts" :key="i" class="sample-item" @click="useSample(i)">示例{{ i+1 }}</span></div>
+        <div class="sample-list"><span v-for="(s, i) in sampleTexts" :key="i" class="sample-item chip-pop" @click="useSample(i)">示例{{ i+1 }}</span></div>
         <p class="sample-tip">💡 示例1适「证件照/通用」· 示例2/4适「快递单」· 示例3适「通用」</p>
       </div>
       <div class="action-row"><span class="char-count">{{ inputText.length }} 字</span><button class="btn btn-primary" @click="runDesensitize" :disabled="!inputText.trim()||processing">{{ processing?'处理中...':'🔒 一键脱敏' }}</button></div>
       <div v-if="error" class="error">{{ error }}</div>
     </div>
-    <div class="result-section" v-if="isProcessed">
+    <div class="result-section reveal" v-if="isProcessed">
       <div class="stats">
         <div class="stat-card high"><span class="stat-num">{{ highRiskCount }}</span><span class="stat-label">高风险</span></div>
         <div class="stat-card medium"><span class="stat-num">{{ spans.filter(s=>s.riskLevel==='medium').length }}</span><span class="stat-label">中风险</span></div>

@@ -10,7 +10,11 @@
       <router-link to="/check" class="nav-item">🔍 强度检测</router-link>
     </nav>
     <main>
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <transition name="page" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </main>
   </div>
 </template>

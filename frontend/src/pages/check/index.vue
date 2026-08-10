@@ -64,8 +64,8 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
 
 <template>
   <div class="page">
-    <div class="hero"><h1 class="hero-title">🛡️ 脱敏强度检测</h1><p class="hero-sub">⭐ 核心特色功能 — 基于信息安全专业能力，评估脱敏是否可被 AI 还原</p></div>
-    <div class="help-card">
+    <div class="hero"><h1 class="hero-title fade-up">🛡️ 脱敏强度检测</h1><p class="hero-sub fade-up" style="animation-delay:0.08s">⭐ 核心特色功能 — 基于信息安全专业能力，评估脱敏是否可被 AI 还原</p></div>
+    <div class="help-card fade-in">
       <div class="help-header"><span>📖 这页做什么？</span></div>
       <div class="help-body">
         <p>上传<strong>脱敏前</strong>和<strong>脱敏后</strong>的图片，系统通过计算两张图的差异来评估：你打的码有没有可能被 AI 还原？</p>
@@ -74,7 +74,7 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
         <p style="color:#6c63ff;font-size:12px;margin-top:6px;">🧪 对抗还原测试：系统会尝试用超分/去模糊/边缘增强还原脱敏区域，验证"打了码就还原不了"</p>
       </div>
     </div>
-    <div class="upload-dual" v-if="!result">
+    <div class="upload-dual stagger" v-if="!result">
       <div class="upload-box"><span class="upload-label">📤 原始图片</span>
         <div v-if="!originalPreview" class="upload-zone"><span class="upload-icon">+</span><input type="file" accept="image/*" @change="handleOriginal" class="file-input" /></div>
         <img v-else :src="originalPreview" class="preview-img" />
@@ -89,14 +89,14 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
       <button class="btn btn-primary" @click="runCheck" :disabled="checking">{{ checking ? '🔍 正在检测中...' : '🔍 开始强度检测' }}</button>
       <button class="btn btn-secondary" @click="swapImages">⇄ 交换两张图</button>
     </div>
-    <div class="result-panel" v-if="result">
+    <div class="result-panel reveal" v-if="result">
       <div class="score-card" :style="{ borderColor: riskLevelColor(result.global_risk_level) }">
         <span class="score-num" :style="{ color: riskLevelColor(result.global_risk_level) }">{{ result.global_risk_score }}</span>
         <span class="score-label">风险评分 (0=安全 100=危险)</span>
         <span class="score-level" :style="{ color: riskLevelColor(result.global_risk_level) }">{{ riskLabel(result.global_risk_level) }}</span>
         <span class="score-msg">{{ result.global_message }}</span>
       </div>
-      <div class="region-details" v-if="result.region_details?.length">
+      <div class="region-details stagger" v-if="result.region_details?.length">
         <h3 class="details-title">📊 逐区域分析 ({{ result.total_regions_checked }} 处)</h3>
         <div v-for="(detail, i) in result.region_details" :key="i" class="detail-card" :style="{ borderLeftColor: riskLevelColor(detail.risk_level) }">
           <div class="detail-header"><span class="detail-index">区域 #{{ detail.region_index + 1 }}</span><span class="detail-risk" :style="{ color: riskLevelColor(detail.risk_level) }">{{ riskLabel(detail.risk_level) }} · {{ detail.risk_score }}分</span></div>
@@ -104,7 +104,7 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
           <span class="detail-suggestion">💡 {{ detail.suggestion }}</span>
         </div>
       </div>
-      <div class="adv-panel" v-if="result.adversarial_summary">
+      <div class="adv-panel reveal" v-if="result.adversarial_summary" style="animation-delay:0.1s">
         <h3 class="details-title">🧪 对抗还原测试（以 AI 测 AI）</h3>
         <div class="adv-verdict" :style="{ borderLeftColor: riskLevelColor(result.adversarial_summary.verdict) }">
           <span class="adv-label" :style="{ color: riskLevelColor(result.adversarial_summary.verdict) }">{{ riskLabel(result.adversarial_summary.verdict) }} · 抗还原判定</span>
