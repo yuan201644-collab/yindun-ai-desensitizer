@@ -46,4 +46,12 @@ describe('linesToRegions Tesseract line 转区域', () => {
     expect(regions.length).toBe(1)
     expect(regions[0].rect.x).toBe(0)
   })
+
+  it('支持 scale 缩放（预处理放大后映射回原图坐标）', () => {
+    const regions = linesToRegions([
+      { bbox: { x0: 20, y0: 40, x1: 400, y1: 80 }, text: '13800138000', confidence: 0.9 },
+    ], 2)
+    expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 190, h: 20 })
+    expect(regions[0].bbox[0]).toEqual([10, 20])
+  })
 })
