@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { classifyText } from '../src/utils/sensitivePatterns'
-import { linesToRegions } from '../src/utils/localOCR'
+import { linesToRegions, wordsToRegions } from '../src/utils/localOCR'
 
 describe('classifyText 敏感分类', () => {
   it('命中身份证号并带对象标签', () => {
@@ -53,5 +53,24 @@ describe('linesToRegions Tesseract line 转区域', () => {
     ], 2)
     expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 190, h: 20 })
     expect(regions[0].bbox[0]).toEqual([10, 20])
+  })
+})
+
+describe('wordsToRegions 词级区域（表格/复杂版面回退）', () => {
+  it('按词生成区域并分类', () => {
+    const regions = wordsToRegions([
+      { bbox: { x0: 10, y0: 20, x1: 120, y1: 40 }, text: '13800138000', confidence: 0.9 },
+      { bbox: { x0: 5, y0: 5, x1: 50, y1: 20 }, text: '姓名' },
+    ])
+    expect(regions.length).toBe(2)
+    expect(regions[0].sensitive?.type).toBe('手机号')
+    expect(regions[1].sensitive).toBeNull()
+  })
+
+  it('支持 scale 映射', () => {
+    const regions = wordsToRegions([
+      { bbox: { x0: 20, y0: 40, x1: 120, y1: 60 }, text: 'B24041701' },
+    ], 2)
+    expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 50, h: 10 })
   })
 })

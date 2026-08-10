@@ -25,6 +25,12 @@ interface TesseractLine {
   confidence?: number
 }
 
+interface TesseractWord {
+  bbox?: { x0: number; y0: number; x1: number; y1: number }
+  text?: string
+  confidence?: number
+}
+
 /** 纯函数：Tesseract line → OCRRegion（与云端区域结构一致，供单测）
  *  scale：预处理放大倍数，坐标除以 scale 映射回原始图片坐标 */
 export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegion[] {
@@ -43,6 +49,28 @@ export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegio
         },
         text,
         confidence: l.confidence ?? 0,
+        sensitive: classifyText(text),
+      }
+    })
+}
+
+/** 纯函数：Tesseract word → OCRRegion（表格/复杂版面 lines 为空时的回退方案） */
+export function wordsToRegions(words: TesseractWord[], scale = 1): LocalOCRRegion[] {
+  return words
+    .filter(w => w.text && w.text.trim())
+    .map(w => {
+      const { x0, y0, x1, y1 } = w.bbox ?? { x0: 0, y0: 0, x1: 0, y1: 0 }
+      const text = (w.text || '').trim()
+      return {
+        bbox: [[x0 / scale, y0 / scale], [x1 / scale, y0 / scale], [x1 / scale, y1 / scale], [x0 / scale, y1 / scale]],
+        rect: {
+          x: Math.round(x0 / scale),
+          y: Math.round(y0 / scale),
+          w: Math.max(1, Math.round((x1 - x0) / scale)),
+          h: Math.max(1, Math.round((y1 - y0) / scale)),
+        },
+        text,
+        confidence: w.confidence ?? 0,
         sensitive: classifyText(text),
       }
     })
@@ -108,5 +136,8 @@ export async function recognizeLocal(image: Blob): Promise<LocalOCRRegion[]> {
   const worker = await getWorker()
   const { canvas, scale } = await preprocessImage(image)
   const { data } = await worker.recognize(canvas)
-  return linesToRegions(data.lines ?? [], scale)
+  // 表格/复杂版面时 Tesseract 的行分组会失败（data.lines 为空但 words 有内容）→ 回退按词
+  const lines = data.lines ?? []
+  if (lines.length > 0) return linesToRegions(lines, scale)
+  return wordsToRegions(data.words ?? [], scale)
 }
