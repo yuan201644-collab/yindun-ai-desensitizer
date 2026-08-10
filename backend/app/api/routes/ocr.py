@@ -16,7 +16,7 @@ import numpy as np
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from app.services.ocr_service import OCRService
 from app.services.detection_service import DetectionService
-from app.core.config import SecurityConfig
+from app.core.config import SecurityConfig, OCRConfig
 
 router = APIRouter(prefix="/api", tags=["OCR"])
 
@@ -51,14 +51,25 @@ async def ocr_detect(
     if image is None:
         raise HTTPException(400, "图片解码失败，请检查文件完整性")
 
-    # 3. 尺寸检查
-    h, w = image.shape[:2]
-    max_dim = max(h, w)
-    if max_dim > SecurityConfig.MAX_IMAGE_DIMENSION:
-        scale = SecurityConfig.MAX_IMAGE_DIMENSION / max_dim
-        new_w, new_h = int(w * scale), int(h * scale)
+    # 3. 尺寸检查：记录原图尺寸，OCR 前下采样提速
+    orig_h, orig_w = image.shape[:2]
+
+    # 3.1 OCR 下采样：最长边 > OCR_MAX_SIDE(1600) → 按比例缩到该边长
+    #     (比 3.2 的 4096 安全上限更严格，实际先触发；两者共存，4096 仅作兜底)
+    scale = 1.0  # 缩放比 = 原边长/缩后边长 (>1)，坐标还原到原图时用
+    if max(orig_h, orig_w) > OCRConfig.OCR_MAX_SIDE:
+        ratio = OCRConfig.OCR_MAX_SIDE / max(orig_h, orig_w)
+        new_w, new_h = int(orig_w * ratio), int(orig_h * ratio)
         image = cv2.resize(image, (new_w, new_h))
-        h, w = new_h, new_w
+        scale = max(orig_h, orig_w) / OCRConfig.OCR_MAX_SIDE
+
+    # 3.2 4096 安全上限（兜底）：OCR_MAX_SIDE 下采样后此分支通常不会触发
+    h, w = image.shape[:2]
+    if max(h, w) > SecurityConfig.MAX_IMAGE_DIMENSION:
+        ratio = SecurityConfig.MAX_IMAGE_DIMENSION / max(h, w)
+        new_w, new_h = int(w * ratio), int(h * ratio)
+        image = cv2.resize(image, (new_w, new_h))
+        scale *= 1.0 / ratio  # 叠加进总缩放比
 
     # 4. OCR 文本检测
     text_regions = ocr_service.detect_text(image, mode=mode)
@@ -72,12 +83,29 @@ async def ocr_detect(
         except Exception as e:
             print(f"[OCR] 目标检测跳过 (YOLO 不可用): {e}")
 
-    # 6. 组装响应
+    # 6. 坐标还原：发生过下采样时，把检测框坐标还原到原图坐标系
+    # ⚠️ 方案原文写"除以 scale"，但 scale=原边长/缩后边长(>1)，除会进一步缩小；
+    #    按方案目标（还原到原图坐标系、前端 overlay 不错位），还原应为乘以 scale。
+    if scale != 1.0:
+        for region in text_regions + object_regions:
+            rect = region.get("rect")
+            if rect:
+                rect["x"] = int(round(rect["x"] * scale))
+                rect["y"] = int(round(rect["y"] * scale))
+                rect["w"] = int(round(rect["w"] * scale))
+                rect["h"] = int(round(rect["h"] * scale))
+            bbox = region.get("bbox")
+            if bbox:
+                for pt in bbox:
+                    pt[0] = int(round(pt[0] * scale))
+                    pt[1] = int(round(pt[1] * scale))
+
+    # 7. 组装响应
     return {
         "success": True,
         "image_info": {
-            "width": w,
-            "height": h,
+            "width": orig_w,
+            "height": orig_h,
             # 仅返回扩展名，不暴露用户本地路径
             "format": file.filename.split(".")[-1].lower() if file.filename else "unknown",
         },

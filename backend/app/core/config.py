@@ -50,6 +50,8 @@ class OCRConfig:
     # 检测精度 (降低可提速)
     DET_DB_THRESH: float = 0.3
     DET_DB_BOX_THRESH: float = 0.5
+    # OCR 前下采样目标边长（最长边超过则按比例缩到该值，坐标随后端还原到原图）
+    OCR_MAX_SIDE: int = 1600
     # 检测框后处理（贴合文字 + 过滤空白误检）
     MIN_CONFIDENCE: float = 0.45      # 识别置信度下限（低于则丢弃）
     MIN_INK_RATIO: float = 0.01       # 框内"墨水"像素占比下限（空白背景误检）
