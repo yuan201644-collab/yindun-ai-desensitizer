@@ -161,8 +161,11 @@ const categoryGroups = computed<CategoryGroup[]>(() => {
     g.regions.push(rect); g.total++
     if (isRegionSelected(rect)) g.selectedCount++
   }
-  textRegions.value.forEach((r: any) =>
-    push(r.sensitive?.object_label || r.sensitive?.type || r.text || '文本', { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  textRegions.value.forEach((r: any) => {
+    // 只把识别出敏感类型的区域加入分类（细碎文本不进 chips，仍可图上单独点选）
+    const s = r.sensitive
+    if (s) push(s.object_label || s.type, { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
+  })
   objectRegions.value.forEach((r: any) =>
     push(r.label || '目标', { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
   return Array.from(map.values())

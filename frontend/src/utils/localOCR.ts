@@ -31,9 +31,10 @@ interface TesseractWord {
   confidence?: number
 }
 
-/** 过滤无意义词条：表格边框/纯符号（| [| —— …）等不应成为脱敏区域 */
+/** 过滤无意义词条：表格边框/纯符号（| [| —— …）不应成为脱敏区域；
+ *  中文标点（、，。！？：；）保留，作为合并时把短语拆开的"分隔符" */
 export function isMeaningfulText(text: string): boolean {
-  return /[一-龥A-Za-z0-9]/.test(text)
+  return /[一-龥A-Za-z0-9、，。！？：；]/.test(text)
 }
 
 /** 纯函数：Tesseract line → OCRRegion（与云端区域结构一致，供单测）
@@ -131,11 +132,11 @@ export function groupRegionsToLines(regions: LocalOCRRegion[]): LocalOCRRegion[]
     }
     if (!placed) lines.push({ y0: it.y0, y1: it.y1, items: [it] })
   }
-  // 组内按 x 排序，按间隙切成段（碎片合并成单元格，列间距大则保持独立）
+  // 组内按 x 排序，按间隙切成段（只合并紧贴碎片，单元格/列独立）
   const out: LocalOCRRegion[] = []
   for (const line of lines) {
     line.items.sort((a, b) => a.x0 - b.x0)
-    const gapThreshold = Math.max(4, (line.y1 - line.y0) * 0.3)
+    const gapThreshold = Math.max(2, (line.y1 - line.y0) * 0.15)
     let seg: typeof line.items = []
     const flush = () => {
       if (!seg.length) return
@@ -153,8 +154,10 @@ export function groupRegionsToLines(regions: LocalOCRRegion[]): LocalOCRRegion[]
     }
     for (let i = 0; i < line.items.length; i++) {
       const it = line.items[i]
-      if (seg.length && it.x0 - line.items[i - 1].x1 > gapThreshold) flush()
-      seg.push(it)
+      // 中文标点作为分隔符：断开当前段、自身不进区域内容
+      const isPunct = /^[、，。！？：；、]+$/.test(it.r.text)
+      if (seg.length && (isPunct || it.x0 - line.items[i - 1].x1 > gapThreshold)) flush()
+      if (!isPunct) seg.push(it)
     }
     flush()
   }
