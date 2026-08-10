@@ -157,8 +157,17 @@ function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolea
   return selectedRegions.value.some(r => r.x === region.x && r.y === region.y)
 }
 
+// 删除图片：全部重置（回到上传）
 function startOver() {
   resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'; complexity.value = null
+}
+
+// 重新处理：保留当前图片，清空选区/检测，回到识别步骤（无需重新上传）
+function reprocess() {
+  clearRegions()
+  resetDetection()
+  resetProcessed()
+  activeTab.value = 'detect'
 }
 
 // P3 修复：脱敏后可返回选区调整（回到原图预览，保留选区）
@@ -411,7 +420,7 @@ onUnmounted(() => { resetUpload() })
           <p class="result-info">共处理 {{ selectedRegions.length }} 处敏感信息</p>
           <button class="btn btn-primary" @click="downloadImage">💾 下载图片</button>
           <button class="btn btn-secondary" @click="backToSelect">↩️ 返回选区调整</button>
-          <button class="btn btn-secondary" @click="startOver">🔄 重新处理</button>
+          <button class="btn btn-secondary" @click="reprocess">🔄 重新处理（保留图片）</button>
           <div class="check-link">
             <span>还不够放心？</span>
             <router-link to="/check" class="link" @click="prepareCheck">👉 去检测脱敏强度（自动带入图片）</router-link>
