@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes.ocr import router as ocr_router
+from app.core.config import OCRConfig
 from app.api.routes.desensitize import router as desensitize_router
 from app.api.routes.anti_restore import router as anti_restore_router
 
@@ -62,7 +63,7 @@ async def warmup_models():
 
     try:
         from paddleocr import PaddleOCR
-        PaddleOCR(lang="ch", use_angle_cls=True, use_gpu=False, show_log=False)
+        PaddleOCR(lang="ch", use_angle_cls=True, use_gpu=OCRConfig.USE_GPU, show_log=False)
         print("[Startup] PaddleOCR 预热完成")
     except Exception as e:
         print(f"[Startup] PaddleOCR 预热跳过: {e}")

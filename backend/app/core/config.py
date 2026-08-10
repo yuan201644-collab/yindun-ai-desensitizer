@@ -43,6 +43,7 @@ class SecurityConfig:
 class OCRConfig:
     # PaddleOCR 模型选择
     # det: 文本检测 | rec: 文本识别 | cls: 方向分类
+    USE_GPU: bool = False                         # GPU 需 cuDNN8 运行库；本机缺 → CPU
     LANG: str = "ch"                              # 中英文混合
     DET_MODEL_DIR: str = ""                       # 留空=自动下载预训练模型
     REC_MODEL_DIR: str = ""

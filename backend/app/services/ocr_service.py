@@ -34,13 +34,23 @@ class OCRService:
         if self._ocr is not None:
             return
         from paddleocr import PaddleOCR
-        self._ocr = PaddleOCR(
-            lang=OCRConfig.LANG,
-            use_angle_cls=True,
-            use_gpu=False,          # CPU 模式，最稳定
-            show_log=False,
-        )
-        print("[OCR] PaddleOCR (CPU) 初始化完成")
+        try:
+            self._ocr = PaddleOCR(
+                lang=OCRConfig.LANG,
+                use_angle_cls=True,
+                use_gpu=OCRConfig.USE_GPU,   # GPU 加速（Paddle GPU 版）
+                show_log=False,
+            )
+            print(f"[OCR] PaddleOCR ({'GPU' if OCRConfig.USE_GPU else 'CPU'}) 初始化完成")
+        except Exception as e:
+            print(f"[OCR] GPU 初始化失败，回退 CPU: {e}")
+            self._ocr = PaddleOCR(
+                lang=OCRConfig.LANG,
+                use_angle_cls=True,
+                use_gpu=False,
+                show_log=False,
+            )
+            print("[OCR] PaddleOCR (CPU) 初始化完成")
 
     def detect_text(self, image: np.ndarray, mode: str = "full") -> list[dict]:
         self._init_ocr()

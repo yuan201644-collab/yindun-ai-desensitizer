@@ -60,6 +60,13 @@
 - 检测后按敏感类别分组（🪪证件/📱联系方式/📦快递单…）显示 chips，**一键全选/取消该类**，含选中数；右上「✔ 全选 / ✖ 取消全选」
 - 类别 chips 三态：全选(蓝) / 部分(黄) / 未选(灰)
 
+### Paddle GPU 尝试 + 优雅回退
+- 尝试启用 PaddleOCR GPU：装 paddlepaddle-gpu 2.6.1（CUDA 12），`is_compiled_with_cuda=True`
+- **阻塞**：运行时缺 cudnn64_8.dll（机器无 CUDA toolkit，torch 自带的是 cuDNN 9，版本不匹配）→ GPU 无法推理
+- 回退 CPU paddle 2.6.2（OCR 恢复正常，210 区域；实测该截图热调用 ~11s）
+- 代码保留 GPU 优雅回退：OCRConfig.USE_GPU=True 时尝试 GPU，失败自动回退 CPU；当前置 False
+- 后续提速可选：① 装 cuDNN 8 启用 GPU（需下载 ~GB）② 大图下采样（无需环境变更，立即见效）
+
 ### 云端 OCR 检测框后处理（贴合文字 + 过滤空白误检）
 - 根因：PaddleOCR 检测框在表格上易向外溢出、空白背景误检、跨行跨格
 - 修复 `_tighten_and_filter`：① 低置信度丢弃（<0.45）② 框内"墨水"密度过低 → 空白误检丢弃 ③ 按文字实际边界向内收紧（留 1px 边距）
