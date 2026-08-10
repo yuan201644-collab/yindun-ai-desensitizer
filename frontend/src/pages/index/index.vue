@@ -235,7 +235,6 @@ onUnmounted(() => { resetUpload() })
         <p class="upload-text">点击上传或拖拽图片到此处</p>
         <p class="upload-hint">支持 PNG / JPG / WebP，最大 20MB</p>
       </div>
-      <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" style="display:none" @change="onFileSelected" />
       <div class="mode-selector">
         <p class="mode-label">识别模式：</p>
         <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 云端增强（PaddleOCR · 精准）</label>
@@ -243,6 +242,9 @@ onUnmounted(() => { resetUpload() })
       </div>
       <div v-if="uploadState.status === 'error'" class="error-msg">⚠️ {{ uploadState.errorMessage }}</div>
     </div>
+
+    <!-- 文件输入框：放在上传区外，保证进入工作区（更换图片）时始终存在 -->
+    <input ref="fileInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" style="display:none" @change="onFileSelected" />
 
     <!-- 工作区 -->
     <div class="workspace" v-if="uploadState.status === 'ready'">
