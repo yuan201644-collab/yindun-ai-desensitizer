@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { classifyText } from '../src/utils/sensitivePatterns'
-import { linesToRegions, wordsToRegions } from '../src/utils/localOCR'
+import { linesToRegions, wordsToRegions, parseHocr } from '../src/utils/localOCR'
 
 describe('classifyText 敏感分类', () => {
   it('命中身份证号并带对象标签', () => {
@@ -71,6 +71,24 @@ describe('wordsToRegions 词级区域（表格/复杂版面回退）', () => {
     const regions = wordsToRegions([
       { bbox: { x0: 20, y0: 40, x1: 120, y1: 60 }, text: 'B24041701' },
     ], 2)
+    expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 50, h: 10 })
+  })
+})
+
+describe('parseHocr hOCR 原始输出兜底', () => {
+  it('从 ocr_word 解析词框并分类', () => {
+    const hocr = `<div class='ocr_page'><span class='ocrx_word' title='bbox 10 20 120 40'>13800138000</span><span class='ocrx_word' title='bbox 5 5 60 20'>姓名</span></div>`
+    const regions = parseHocr(hocr)
+    expect(regions.length).toBe(2)
+    expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 110, h: 20 })
+    expect(regions[0].sensitive?.type).toBe('手机号')
+    expect(regions[1].sensitive).toBeNull()
+  })
+
+  it('支持 scale 映射并跳过空文本', () => {
+    const hocr = `<span class='ocrx_word' title='bbox 20 40 120 60'>B24041701</span><span class='ocrx_word' title='bbox 1 1 2 2'> </span>`
+    const regions = parseHocr(hocr, 2)
+    expect(regions.length).toBe(1)
     expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 50, h: 10 })
   })
 })

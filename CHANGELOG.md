@@ -60,6 +60,12 @@
 - 检测后按敏感类别分组（🪪证件/📱联系方式/📦快递单…）显示 chips，**一键全选/取消该类**，含选中数；右上「✔ 全选 / ✖ 取消全选」
 - 类别 chips 三态：全选(蓝) / 部分(黄) / 未选(灰)
 
+### 本地 OCR 修复：hOCR 原始输出兜底
+- 用户浏览器实测：Tesseract 读到文字（data.text 有内容）但 data.lines/words 均为空（tesseract.js 词解析在部分浏览器环境失败）
+- 修复：recognizeLocal 请求 hOCR 原始输出，words/lines 都空时从 hOCR 解析 ocr_word 词框（坐标+文本+敏感分类）
+- 诊断日志 `[localOCR] lines/words/hocr` 辅助定位；OCR 失败不再误显示"未检测到"
+- 新增 parseHocr 单测（2 项）
+
 ### 本地 OCR 修复：表格/复杂版面 words 回退
 - 根因：名单表格等复杂版面 Tesseract 行分组失败（`data.lines` 为空但 `data.words` 有内容），`recognizeLocal` 用了空 lines → 报"未检测到"
 - 修复：`data.lines` 为空时回退到 `wordsToRegions`（按词生成区域，表格每格一个独立区域）

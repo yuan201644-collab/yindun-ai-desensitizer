@@ -54,6 +54,32 @@ export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegio
     })
 }
 
+/**
+ * 纯函数：从 hOCR 原始输出解析词框（tesseract.js 的 words/lines 解析在某些浏览器为空时的兜底）
+ * hOCR 词条格式：<span class='ocrx_word' title='bbox x0 y0 x1 y1'>text</span>
+ */
+export function parseHocr(hocr: string, scale = 1): LocalOCRRegion[] {
+  const regions: LocalOCRRegion[] = []
+  const re = /<span class='ocrx_word' title='bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)'[^>]*>([^<]*)<\/span>/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(hocr)) !== null) {
+    const x0 = +m[1], y0 = +m[2], x1 = +m[3], y1 = +m[4]
+    const text = (m[5] || '').trim()
+    if (!text) continue
+    regions.push({
+      bbox: [[x0 / scale, y0 / scale], [x1 / scale, y0 / scale], [x1 / scale, y1 / scale], [x0 / scale, y1 / scale]],
+      rect: {
+        x: Math.round(x0 / scale), y: Math.round(y0 / scale),
+        w: Math.max(1, Math.round((x1 - x0) / scale)), h: Math.max(1, Math.round((y1 - y0) / scale)),
+      },
+      text,
+      confidence: 0,
+      sensitive: classifyText(text),
+    })
+  }
+  return regions
+}
+
 /** 纯函数：Tesseract word → OCRRegion（表格/复杂版面 lines 为空时的回退方案） */
 export function wordsToRegions(words: TesseractWord[], scale = 1): LocalOCRRegion[] {
   return words
@@ -135,14 +161,17 @@ async function getWorker(): Promise<any> {
 export async function recognizeLocal(image: Blob): Promise<LocalOCRRegion[]> {
   const worker = await getWorker()
   const { canvas, scale } = await preprocessImage(image)
-  const { data } = await worker.recognize(canvas)
-  // 表格/复杂版面时 Tesseract 的行分组会失败（data.lines 为空但 words 有内容）→ 回退按词
+  // 同时请求 text + hocr 原始输出（hocr 作为 words/lines 解析失败的兜底）
+  const { data } = await worker.recognize(canvas, {}, { text: true, hocr: true })
   const lines = data.lines ?? []
   const words = data.words ?? []
-  // 诊断日志：识别不到时靠这个定位是 lines/words 都空，还是 worker 报错
-  console.log('[localOCR] lines:', lines.length, '| words:', words.length, '| text:', JSON.stringify((data.text || '').slice(0, 60)))
+  console.log('[localOCR] lines:', lines.length, '| words:', words.length, '| hocr 词条:', (data.hocr || '').includes('ocrx_word') ? '有' : '无')
   if (lines.length > 0) return linesToRegions(lines, scale)
   if (words.length > 0) return wordsToRegions(words, scale)
-  console.warn('[localOCR] 无任何识别结果（lines/words 均为空）')
+  if (data.hocr) {
+    const fromHocr = parseHocr(data.hocr, scale)
+    if (fromHocr.length > 0) return fromHocr
+  }
+  console.warn('[localOCR] 无任何识别结果（lines/words/hocr 均为空）')
   return []
 }
