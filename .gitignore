@@ -47,3 +47,6 @@ frontend/tests/coverage/
 orchestrator.sh
 orchestrator_auto.sh
 .claude/
+
+# tesseract.js 解压缓存（Node 测试产物，非仓库资源）
+*.traineddata
