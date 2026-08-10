@@ -7,6 +7,7 @@ import { applyDesensitize, drawImageToCanvas, canvasToBlob } from '../../utils/c
 import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
 import { recognizeLocal } from '../../utils/localOCR'
 import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
+import { setCheckImages } from '../../utils/checkTransfer'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -138,6 +139,13 @@ function startOver() {
 function backToSelect() {
   resetProcessed()
   activeTab.value = 'desensitize'
+}
+
+// 跳转检测强度前，把原图/脱敏图写入中转，检测页自动带入（无需重新上传）
+function prepareCheck() {
+  if (originalImage.value && processedImage.value) {
+    setCheckImages(originalImage.value, processedImage.value)
+  }
 }
 
 // ---------- 按类别一键全选 ----------
@@ -368,7 +376,7 @@ onUnmounted(() => { resetUpload() })
           <button class="btn btn-secondary" @click="startOver">🔄 重新处理</button>
           <div class="check-link">
             <span>还不够放心？</span>
-            <router-link to="/check" class="link">👉 去检测脱敏强度</router-link>
+            <router-link to="/check" class="link" @click="prepareCheck">👉 去检测脱敏强度（自动带入图片）</router-link>
           </div>
         </div>
 

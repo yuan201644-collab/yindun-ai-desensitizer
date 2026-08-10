@@ -1,56 +1,62 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { BASE_URL } from '../../utils/api'
+import { takeCheckImages } from '../../utils/checkTransfer'
 
-const originalFile = ref<File | null>(null)
-const processedFile = ref<File | null>(null)
 const originalPreview = ref('')
 const processedPreview = ref('')
 const checking = ref(false)
 const result = ref<any>(null)
 const error = ref('')
+// 图片数据源（原始 base64，无 data: 前缀）：手动上传或从脱敏页自动带入
+let originalB64 = ''
+let processedB64 = ''
 
-function handleOriginal(e: Event) {
-  const target = e.target as HTMLInputElement
-  if (target.files?.[0]) { originalFile.value = target.files[0]; originalPreview.value = URL.createObjectURL(target.files[0]) }
+function setImage(kind: 'original' | 'processed', file: File) {
+  const reader = new FileReader()
+  reader.onload = () => {
+    const b64 = (reader.result as string).split(',')[1]
+    if (kind === 'original') { originalB64 = b64; originalPreview.value = URL.createObjectURL(file) }
+    else { processedB64 = b64; processedPreview.value = URL.createObjectURL(file) }
+  }
+  reader.readAsDataURL(file)
 }
-function handleProcessed(e: Event) {
-  const target = e.target as HTMLInputElement
-  if (target.files?.[0]) { processedFile.value = target.files[0]; processedPreview.value = URL.createObjectURL(target.files[0]) }
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => { const r = reader.result as string; resolve(r.split(',')[1]) }
-    reader.onerror = reject; reader.readAsDataURL(file)
-  })
-}
+function handleOriginal(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) setImage('original', f) }
+function handleProcessed(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) setImage('processed', f) }
 
 async function runCheck() {
-  if (!originalFile.value || !processedFile.value) return
+  if (!originalB64 || !processedB64) return
   checking.value = true; error.value = ''; result.value = null
   try {
-    const origB64 = await fileToBase64(originalFile.value)
-    const procB64 = await fileToBase64(processedFile.value)
     const res = await fetch(BASE_URL + '/api/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ original_image_base64: origB64, processed_image_base64: procB64, regions: [] }),
+      body: JSON.stringify({ original_image_base64: originalB64, processed_image_base64: processedB64, regions: [] }),
     })
     const data = await res.json()
     if (data.success) { result.value = data } else { error.value = data.error || '检测失败' }
   } catch (e: any) { error.value = e.message || '检测请求失败，请确认后端服务已启动' } finally { checking.value = false }
 }
 
-function reset() { originalFile.value = null; processedFile.value = null; originalPreview.value = ''; processedPreview.value = ''; result.value = null; error.value = '' }
+function reset() { originalB64 = ''; processedB64 = ''; originalPreview.value = ''; processedPreview.value = ''; result.value = null; error.value = '' }
 
 // P3 修复：交换原图/脱敏图（传反了不用重传）
 function swapImages() {
-  const f = originalFile.value; originalFile.value = processedFile.value; processedFile.value = f
+  const b = originalB64; originalB64 = processedB64; processedB64 = b
   const p = originalPreview.value; originalPreview.value = processedPreview.value; processedPreview.value = p
   result.value = null; error.value = ''
 }
+
+// 从脱敏页跳转过来时自动带入原图/脱敏图
+onMounted(() => {
+  const t = takeCheckImages()
+  if (t.original && t.processed) {
+    originalB64 = t.original
+    processedB64 = t.processed
+    originalPreview.value = 'data:image/png;base64,' + t.original
+    processedPreview.value = 'data:image/png;base64,' + t.processed
+  }
+})
 function riskLevelColor(level: string): string { if (level==='safe') return '#22c55e'; if (level==='warning') return '#ffaa00'; return '#ff4444' }
 function riskLabel(level: string): string { if (level==='safe') return '🟢 安全'; if (level==='warning') return '🟡 警告'; return '🔴 危险' }
 const advRegions = computed(() => (result.value?.region_details || []).filter((d: any) => d.adversarial?.attacks?.length))
