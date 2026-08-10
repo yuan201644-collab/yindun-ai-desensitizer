@@ -24,7 +24,7 @@ const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 const detectEmpty = ref(false)
 const complexity = ref<ComplexityResult | null>(null)
-// 云端 OCR 加载计时与预估（预估来自历史真实耗时，非臆测）
+// 后端 OCR 加载计时与预估（预估来自历史真实耗时，非臆测）
 const loadingElapsed = ref(0)
 const loadingEstimate = ref<number | null>(null)
 let loadingTimer: number | null = null
@@ -51,7 +51,7 @@ function applyFile(file: File) {
   activeTab.value = 'detect'
   clearRegions()
   resetDetection()
-  // 分流引导：评估图片复杂度（表格/密集 → 推荐云端）
+  // 分流引导：评估图片复杂度（表格/密集 → 推荐精准增强）
   complexity.value = null
   assessComplexity(file).then(c => { complexity.value = c }).catch(() => { complexity.value = null })
 }
@@ -88,7 +88,7 @@ async function runOCR() {
       textRegions.value = await recognizeLocal(uploadState.value.file)
       objectRegions.value = []
     } catch (e: any) {
-      ocrError.value = '本地 OCR 失败：' + (e.message || '请检查网络或切换云端模式')
+      ocrError.value = '本地 OCR 失败：' + (e.message || '请检查网络或切换精准增强模式')
     }
   }
   // 仅当无错误时才提示"未检测到"（有错误时显示具体错误，不误导）
@@ -301,7 +301,7 @@ onUnmounted(() => { resetUpload() })
       </div>
       <div class="mode-selector">
         <p class="mode-label">识别模式：</p>
-        <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 云端增强（PaddleOCR · 精准）</label>
+        <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 精准增强（PaddleOCR · 高精度）</label>
         <label class="mode-option"><input type="radio" v-model="processingMode" value="local" /> 本地处理（Tesseract WASM · 图片不出设备）</label>
       </div>
       <div v-if="uploadState.status === 'error'" class="error-msg">⚠️ {{ uploadState.errorMessage }}</div>
@@ -357,7 +357,7 @@ onUnmounted(() => { resetUpload() })
       <div class="control-panel fade-in">
         <div v-if="complexity && !isProcessed" class="complexity-banner fade-in" :class="complexity.level">
           <span class="cb-text">{{ complexity.reason }}</span>
-          <button v-if="complexity.level !== 'simple' && processingMode === 'local'" class="cb-btn" @click="processingMode = 'cloud'">改用云端</button>
+          <button v-if="complexity.level !== 'simple' && processingMode === 'local'" class="cb-btn" @click="processingMode = 'cloud'">改用精准增强</button>
           <span v-else-if="complexity.level === 'simple'" class="cb-ok">✓ 两种模式都可用</span>
         </div>
         <div class="image-actions" v-if="!isProcessed">

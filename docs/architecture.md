@@ -12,7 +12,7 @@
           ┌────────────────┴────────────────┐
           ▼                                 ▼
 ┌──────────────────┐            ┌──────────────────────┐
-│  前端 Canvas 引擎 │  (本地)     │   FastAPI 后端 (GPU)  │ (云端增强)
+│  前端 Canvas 引擎 │  (本地)     │   FastAPI 后端 (GPU)  │ (精准增强)
 │  · Tesseract.js  │◄──────────►│  · PaddleOCR GPU     │
 │  · 像素化/模糊    │  可选切换    │  · YOLOv8-nano       │
 │  · 不可逆替换     │            │  · 脱敏算法库         │
@@ -22,7 +22,7 @@
 
 **核心设计理念：端侧优先 + 服务端增强 双模式**
 - **本地模式**：OCR/Tesseract.js + Canvas 脱敏，图片完全不出设备
-- **云端模式**：PaddleOCR GPU 精准识别 → 仅返回坐标 → 前端 Canvas 脱敏
+- **精准模式**：PaddleOCR GPU 精准识别 → 仅返回坐标 → 前端 Canvas 脱敏
 - 两种模式一键切换，用户自主选择
 
 ---
@@ -123,7 +123,7 @@
   → Canvas 渲染预览
   → [模式选择]
       ├─ 本地：Tesseract.js WASM OCR → 前端正则分类
-      └─ 云端：上传 → PaddleOCR+YOLO → 返回 {regions}
+      └─ 精准增强：上传 → PaddleOCR+YOLO → 返回 {regions}
   → 前端叠加半透明标注框 (用户可增删)
   → 用户选择脱敏算法 + 强度
   → Canvas 逐区域应用脱敏算法

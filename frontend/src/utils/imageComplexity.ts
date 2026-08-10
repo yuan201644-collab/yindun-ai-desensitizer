@@ -3,8 +3,8 @@
  * 「隐盾」图片复杂度评估（识别模式分流引导）
  * ================================================================
  * 上传后轻量分析：边缘密度 + 网格线占比 → 判断简单/中等/复杂版面。
- * - 简单场景：本地/云端均可（推荐任一）
- * - 复杂版面（表格/密集文档）：推荐云端（PaddleOCR 精度高，Tesseract 会碎字）
+ * - 简单场景：本地/精准均可（推荐任一）
+ * - 复杂版面（表格/密集文档）：推荐精准增强（PaddleOCR 精度高，Tesseract 会碎字）
  *
  * 纯函数 classifyComplexity 可单测；assessComplexity 依赖浏览器 canvas。
  */
@@ -24,16 +24,16 @@ export function classifyComplexity(edgeDensity: number, gridRatio: number): Comp
   let reason: string
   if (gridRatio > 0.04) {
     level = 'complex'
-    reason = '检测到网格/表格结构（表格、账单等复杂版面），推荐云端识别'
+    reason = '检测到网格/表格结构（表格、账单等复杂版面），推荐精准增强识别'
   } else if (edgeDensity > 0.12) {
     level = 'complex'
-    reason = '内容密集、布局复杂（文字多/小字），推荐云端识别'
+    reason = '内容密集、布局复杂（文字多/小字），推荐精准增强识别'
   } else if (edgeDensity > 0.06) {
     level = 'medium'
-    reason = '内容较多，本地/云端均可，云端更准'
+    reason = '内容较多，本地/精准均可，精准更准'
   } else {
     level = 'simple'
-    reason = '内容简单（大字/截图文本），本地/云端均可'
+    reason = '内容简单（大字/截图文本），本地/精准均可'
   }
   return { level, edgeDensity: +edgeDensity.toFixed(3), gridRatio: +gridRatio.toFixed(4), reason }
 }

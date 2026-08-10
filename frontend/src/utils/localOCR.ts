@@ -3,7 +3,7 @@
  * 「隐盾」本地 OCR（端侧优先 / 隐私卖点）
  * ================================================================
  * 用 Tesseract.js WASM 在浏览器端跑 OCR，图片不出设备。
- * 识别结果转换为与云端 /api/ocr 相同的区域结构，复用下游脱敏流程。
+ * 识别结果转换为与后端 /api/ocr 相同的区域结构，复用下游脱敏流程。
  *
  * 纯函数（linesToRegions / classifyText）与 tesseract 调用分离，
  * 便于单测且不污染 node 测试环境。
@@ -37,7 +37,7 @@ export function isMeaningfulText(text: string): boolean {
   return /[一-龥A-Za-z0-9、，。！？：；]/.test(text)
 }
 
-/** 纯函数：Tesseract line → OCRRegion（与云端区域结构一致，供单测）
+/** 纯函数：Tesseract line → OCRRegion（与后端区域结构一致，供单测）
  *  scale：预处理放大倍数，坐标除以 scale 映射回原始图片坐标 */
 export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegion[] {
   return lines
