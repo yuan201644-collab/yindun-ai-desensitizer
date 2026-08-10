@@ -59,7 +59,8 @@ async function runOCR() {
       ocrError.value = '本地 OCR 失败：' + (e.message || '请检查网络或切换云端模式')
     }
   }
-  detectEmpty.value = textRegions.value.length === 0 && objectRegions.value.length === 0
+  // 仅当无错误时才提示"未检测到"（有错误时显示具体错误，不误导）
+  if (!ocrError.value) detectEmpty.value = textRegions.value.length === 0 && objectRegions.value.length === 0
   applyTemplateAutoSelect()
   activeTab.value = 'desensitize'
 }

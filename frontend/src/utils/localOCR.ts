@@ -138,6 +138,11 @@ export async function recognizeLocal(image: Blob): Promise<LocalOCRRegion[]> {
   const { data } = await worker.recognize(canvas)
   // 表格/复杂版面时 Tesseract 的行分组会失败（data.lines 为空但 words 有内容）→ 回退按词
   const lines = data.lines ?? []
+  const words = data.words ?? []
+  // 诊断日志：识别不到时靠这个定位是 lines/words 都空，还是 worker 报错
+  console.log('[localOCR] lines:', lines.length, '| words:', words.length, '| text:', JSON.stringify((data.text || '').slice(0, 60)))
   if (lines.length > 0) return linesToRegions(lines, scale)
-  return wordsToRegions(data.words ?? [], scale)
+  if (words.length > 0) return wordsToRegions(words, scale)
+  console.warn('[localOCR] 无任何识别结果（lines/words 均为空）')
+  return []
 }
