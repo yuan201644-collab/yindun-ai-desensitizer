@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { classifyText } from '../src/utils/sensitivePatterns'
-import { linesToRegions, wordsToRegions, parseHocr } from '../src/utils/localOCR'
+import { linesToRegions, wordsToRegions, parseHocr, groupRegionsToLines, isMeaningfulText } from '../src/utils/localOCR'
 
 describe('classifyText 敏感分类', () => {
   it('命中身份证号并带对象标签', () => {
@@ -90,5 +90,38 @@ describe('parseHocr hOCR 原始输出兜底', () => {
     const regions = parseHocr(hocr, 2)
     expect(regions.length).toBe(1)
     expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 50, h: 10 })
+  })
+})
+
+describe('isMeaningfulText 过滤表格边框/符号', () => {
+  it('纯符号/边框字符被剔除', () => {
+    expect(isMeaningfulText('|')).toBe(false)
+    expect(isMeaningfulText('[|')).toBe(false)
+    expect(isMeaningfulText('——')).toBe(false)
+    expect(isMeaningfulText('、')).toBe(false)
+  })
+  it('含中英文/数字的文本保留', () => {
+    expect(isMeaningfulText('13800138000')).toBe(true)
+    expect(isMeaningfulText('B24041701')).toBe(true)
+    expect(isMeaningfulText('计算机学院')).toBe(true)
+  })
+})
+
+describe('groupRegionsToLines 按行合并碎片', () => {
+  const W = (x: number, text: string, conf = 80): any => ({
+    bbox: [[x, 0], [x + text.length * 8, 0], [x + text.length * 8, 15], [x, 15]],
+    rect: { x, y: 0, w: text.length * 8, h: 15 },
+    text, confidence: conf, sensitive: null,
+  })
+  it('紧挨的碎字合并成一个单元格区域', () => {
+    const regions = groupRegionsToLines([W(0, '计算'), W(16, '机'), W(24, '学院'), W(120, '13800138000')])
+    expect(regions.length).toBe(2)
+    expect(regions[0].text).toBe('计算机学院')
+    expect(regions[1].text).toBe('13800138000')
+    expect(regions[1].sensitive?.type).toBe('手机号')
+  })
+  it('同一行但列间距大的保持独立', () => {
+    const regions = groupRegionsToLines([W(0, '信息安全'), W(200, 'B24041701')])
+    expect(regions.length).toBe(2)
   })
 })
