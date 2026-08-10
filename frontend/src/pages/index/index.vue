@@ -8,6 +8,7 @@ import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
 import { recognizeLocal, detectNameColumn } from '../../utils/localOCR'
 import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
 import { setCheckImages } from '../../utils/checkTransfer'
+import { getOcrEstimateMs, recordOcrDuration } from '../../utils/ocrStats'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -23,6 +24,20 @@ const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 const detectEmpty = ref(false)
 const complexity = ref<ComplexityResult | null>(null)
+// 云端 OCR 加载计时与预估（预估来自历史真实耗时，非臆测）
+const loadingElapsed = ref(0)
+const loadingEstimate = ref<number | null>(null)
+let loadingTimer: number | null = null
+let ocrStartMs = 0
+
+const loadingTimeText = computed(() => {
+  const el = loadingElapsed.value
+  if (loadingEstimate.value) {
+    const remain = Math.max(0, Math.ceil((loadingEstimate.value - el * 1000) / 1000))
+    return `已用时 ${el}s · 预计还需 ~${remain}s`
+  }
+  return `首次识别稍慢 · 已用时 ${el}s`
+})
 
 function resetDetection() {
   textRegions.value = []
@@ -56,7 +71,18 @@ async function runOCR() {
   if (!uploadState.value.file || uploadState.value.status !== 'ready') return
   ocrError.value = ''
   if (processingMode.value === 'cloud') {
-    await ocrDetect(uploadState.value.file, 'full')
+    // 计时 + 预估（预估用历史真实耗时平均）
+    ocrStartMs = Date.now()
+    loadingElapsed.value = 0
+    loadingEstimate.value = getOcrEstimateMs()
+    if (loadingTimer) clearInterval(loadingTimer)
+    loadingTimer = window.setInterval(() => { loadingElapsed.value = Math.floor((Date.now() - ocrStartMs) / 1000) }, 500)
+    try {
+      await ocrDetect(uploadState.value.file, 'full')
+    } finally {
+      if (loadingTimer) { clearInterval(loadingTimer); loadingTimer = null }
+      recordOcrDuration(Date.now() - ocrStartMs)
+    }
   } else {
     try {
       textRegions.value = await recognizeLocal(uploadState.value.file)
@@ -319,7 +345,13 @@ onUnmounted(() => { resetUpload() })
             <span class="region-label">{{ region.label }}</span>
           </div>
         </div>
-        <div v-if="ocrLoading" class="loading-overlay fade-in"><p class="loading-text">{{ processingMode === 'local' ? '🔍 本地识别中（首次需下载语言包，图片不出设备）...' : '🔍 AI 正在识别敏感信息...' }}</p></div>
+        <div v-if="ocrLoading" class="loading-overlay fade-in">
+          <div class="scan-frame"><div class="scan-line"></div></div>
+          <div class="loading-content">
+            <p class="loading-text">{{ processingMode === 'local' ? '🔍 本地识别中（首次需下载语言包，图片不出设备）...' : '🔍 AI 正在识别敏感信息...' }}</p>
+            <p v-if="processingMode === 'cloud'" class="loading-time">{{ loadingTimeText }}</p>
+          </div>
+        </div>
       </div>
 
       <div class="control-panel fade-in">

@@ -61,3 +61,10 @@
 /* ---------- 状态反馈 ---------- */
 .spin { animation: xspin 0.8s linear infinite; }
 .reveal { animation: xfade-in-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* OCR 扫描线动画 */
+@keyframes xscan { 0% { top: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+.scan-frame { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.scan-line { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, transparent, #6c63ff, transparent); box-shadow: 0 0 14px rgba(108, 99, 255, 0.8); animation: xscan 2.4s ease-in-out infinite; }
+.loading-content { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.loading-time { color: #6c63ff; font-size: 12px; }
