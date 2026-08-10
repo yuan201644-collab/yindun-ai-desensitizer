@@ -3,6 +3,7 @@
 """
 
 import re
+import cv2
 import numpy as np
 from typing import Optional
 from app.core.config import OCRConfig, SENSITIVE_PATTERNS, SENSITIVE_OBJECT_LABELS
@@ -70,7 +71,37 @@ class OCRService:
             if mode == "full":
                 region["sensitive"] = self._classify_sensitive(text)
             regions.append(region)
+
+        # 检测框后处理：空白误检丢弃 + 按文字实际边界收紧
+        regions = self._tighten_and_filter(image, regions)
         return regions
+
+    def _tighten_and_filter(self, image: np.ndarray, regions: list[dict]) -> list[dict]:
+        """检测框贴合文字：低置信度丢弃、空白背景误检丢弃、框向内收紧到文字边界（留 1px 边距）。"""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        out = []
+        for r in regions:
+            if r["confidence"] < OCRConfig.MIN_CONFIDENCE:
+                continue  # 低置信度误检
+            x, y, w, h = r["rect"]["x"], r["rect"]["y"], r["rect"]["w"], r["rect"]["h"]
+            if w <= 0 or h <= 0:
+                continue
+            roi = gray[y:y + h, x:x + w]
+            if roi.size == 0:
+                continue
+            mask = roi < 128  # 暗像素 = 文字"墨水"
+            ink_ratio = float(mask.mean())
+            if ink_ratio < OCRConfig.MIN_INK_RATIO:
+                continue  # 框内几乎无文字 → 空白背景误检
+            ys, xs = np.where(mask)
+            pad = OCRConfig.BOX_PADDING
+            nx0 = max(x, x + int(xs.min()) - pad)
+            ny0 = max(y, y + int(ys.min()) - pad)
+            nx1 = min(x + w - 1, x + int(xs.max()) + pad)
+            ny1 = min(y + h - 1, y + int(ys.max()) + pad)
+            r["rect"] = {"x": nx0, "y": ny0, "w": max(1, nx1 - nx0 + 1), "h": max(1, ny1 - ny0 + 1)}
+            out.append(r)
+        return out
 
     def _classify_sensitive(self, text: str) -> Optional[dict]:
         # 收集所有命中，按类别优先级选最优（避免"地址"松散正则抢命中）

@@ -49,6 +49,10 @@ class OCRConfig:
     # 检测精度 (降低可提速)
     DET_DB_THRESH: float = 0.3
     DET_DB_BOX_THRESH: float = 0.5
+    # 检测框后处理（贴合文字 + 过滤空白误检）
+    MIN_CONFIDENCE: float = 0.45      # 识别置信度下限（低于则丢弃）
+    MIN_INK_RATIO: float = 0.01       # 框内"墨水"像素占比下限（空白背景误检）
+    BOX_PADDING: int = 1              # 收紧后留 1px 边距贴合文字
     # 识别精度
     REC_BATCH_NUM: int = 6
     # 最大文本长度
