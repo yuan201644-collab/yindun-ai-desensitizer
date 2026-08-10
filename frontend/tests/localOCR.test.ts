@@ -76,17 +76,17 @@ describe('wordsToRegions 词级区域（表格/复杂版面回退）', () => {
 })
 
 describe('parseHocr hOCR 原始输出兜底', () => {
-  it('从 ocr_word 解析词框并分类', () => {
-    const hocr = `<div class='ocr_page'><span class='ocrx_word' title='bbox 10 20 120 40'>13800138000</span><span class='ocrx_word' title='bbox 5 5 60 20'>姓名</span></div>`
+  it('从真实格式解析（class 与 title 间有 id、bbox 后有 x_wconf）', () => {
+    const hocr = `<span class='ocrx_word' id='word_1_1' title='bbox 33 12 64 27; x_wconf 76'>205</span><span class='ocrx_word' id='word_1_2' title='bbox 87 0 200 25; x_wconf 59'>13800138000</span>`
     const regions = parseHocr(hocr)
     expect(regions.length).toBe(2)
-    expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 110, h: 20 })
-    expect(regions[0].sensitive?.type).toBe('手机号')
-    expect(regions[1].sensitive).toBeNull()
+    expect(regions[0].rect).toEqual({ x: 33, y: 12, w: 31, h: 15 })
+    expect(regions[1].sensitive?.type).toBe('手机号')
+    expect(regions[0].sensitive).toBeNull()
   })
 
-  it('支持 scale 映射并跳过空文本', () => {
-    const hocr = `<span class='ocrx_word' title='bbox 20 40 120 60'>B24041701</span><span class='ocrx_word' title='bbox 1 1 2 2'> </span>`
+  it('支持 title 后有 lang 属性 + scale 映射', () => {
+    const hocr = `<span class='ocrx_word' id='w' title='bbox 20 40 120 60; x_wconf 90' lang='chi_sim'>B24041701</span><span class='ocrx_word' id='x' title='bbox 1 1 2 2; x_wconf 0'> </span>`
     const regions = parseHocr(hocr, 2)
     expect(regions.length).toBe(1)
     expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 50, h: 10 })

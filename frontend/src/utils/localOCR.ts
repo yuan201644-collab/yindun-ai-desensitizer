@@ -56,11 +56,11 @@ export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegio
 
 /**
  * 纯函数：从 hOCR 原始输出解析词框（tesseract.js 的 words/lines 解析在某些浏览器为空时的兜底）
- * hOCR 词条格式：<span class='ocrx_word' title='bbox x0 y0 x1 y1'>text</span>
+ * 真实格式：<span class='ocrx_word' id='word_1_1' title='bbox x0 y0 x1 y1; x_wconf 76' [lang='xx']>text</span>
  */
 export function parseHocr(hocr: string, scale = 1): LocalOCRRegion[] {
   const regions: LocalOCRRegion[] = []
-  const re = /<span class='ocrx_word' title='bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)'[^>]*>([^<]*)<\/span>/g
+  const re = /<span[^>]*?\bclass='ocrx_word'[^>]*?\btitle='[^']*?bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)[^']*'[^>]*>([^<]*)<\/span>/g
   let m: RegExpExecArray | null
   while ((m = re.exec(hocr)) !== null) {
     const x0 = +m[1], y0 = +m[2], x1 = +m[3], y1 = +m[4]
