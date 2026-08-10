@@ -165,6 +165,35 @@ export function groupRegionsToLines(regions: LocalOCRRegion[]): LocalOCRRegion[]
 }
 
 /**
+ * 纯函数：检测"姓名列"——同一 x 列、2-3 个中文字符、且多为不同文字的区域列（如名单里的姓名列）。
+ * 与"重复字段列"（信息安全×30）区分：姓名列的文字大多不重复。
+ */
+export function detectNameColumn(regions: Array<{ rect: { x: number; y: number; w: number; h: number }; text: string }>):
+  Array<{ rect: { x: number; y: number; w: number; h: number }; text: string }> | null {
+  if (regions.length < 3) return null
+  // 按 x 重叠聚成列
+  const cols: Array<typeof regions> = []
+  for (const r of regions) {
+    let placed = false
+    for (const col of cols) {
+      const first = col[0]
+      const overlap = Math.min(r.rect.x + r.rect.w, first.rect.x + first.rect.w) - Math.max(r.rect.x, first.rect.x)
+      const minW = Math.min(r.rect.w, first.rect.w)
+      if (overlap > minW * 0.5) { col.push(r); placed = true; break }
+    }
+    if (!placed) cols.push([r])
+  }
+  for (const col of cols) {
+    const short = col.filter(r => /^[一-龥]{2,3}$/.test(r.text.trim()))
+    if (short.length >= 3 && short.length >= col.length * 0.8) {
+      const distinct = new Set(short.map(r => r.text.trim())).size
+      if (distinct >= short.length * 0.8) return short  // 名字大多不重复 → 姓名列
+    }
+  }
+  return null
+}
+
+/**
  * 预处理：灰度 + 对比度增强 + 小图放大（宽 <900px 放大到约 2x）。
  * Tesseract 对真实照片/低对比度/小字很弱，预处理能显著提升识别率。
  * 返回 canvas + 放大倍数（用于把识别框坐标映射回原图）。

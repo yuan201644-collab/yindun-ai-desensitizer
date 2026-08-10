@@ -5,7 +5,7 @@ import { useOCR } from '../../composables/useOCR'
 import { useDesensitize } from '../../composables/useDesensitize'
 import { applyDesensitize, drawImageToCanvas, canvasToBlob } from '../../utils/canvas'
 import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
-import { recognizeLocal } from '../../utils/localOCR'
+import { recognizeLocal, detectNameColumn } from '../../utils/localOCR'
 import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
 import { setCheckImages } from '../../utils/checkTransfer'
 
@@ -192,6 +192,11 @@ const categoryGroups = computed<CategoryGroup[]>(() => {
       push(`📌 ${r.text}`, { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
     }
   })
+  // 第三遍：姓名列检测——同一列 2-3 字中文、多为不同文字 → "👤 姓名"分类
+  const nameCol = detectNameColumn(textRegions.value)
+  if (nameCol) {
+    nameCol.forEach(r => push('👤 姓名', { x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  }
   return Array.from(map.values())
 })
 

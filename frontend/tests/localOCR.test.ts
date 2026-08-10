@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { classifyText } from '../src/utils/sensitivePatterns'
-import { linesToRegions, wordsToRegions, parseHocr, groupRegionsToLines, isMeaningfulText } from '../src/utils/localOCR'
+import { linesToRegions, wordsToRegions, parseHocr, groupRegionsToLines, isMeaningfulText, detectNameColumn } from '../src/utils/localOCR'
 
 describe('classifyText 敏感分类', () => {
   it('命中身份证号并带对象标签', () => {
@@ -108,6 +108,24 @@ describe('isMeaningfulText 过滤表格边框/符号', () => {
     expect(isMeaningfulText('13800138000')).toBe(true)
     expect(isMeaningfulText('B24041701')).toBe(true)
     expect(isMeaningfulText('计算机学院')).toBe(true)
+  })
+})
+
+describe('detectNameColumn 姓名列检测', () => {
+  const R = (x: number, text: string, w = 60) => ({ rect: { x, y: 0, w, h: 20 }, text })
+  it('同一列的不同短中文 → 姓名列', () => {
+    const regions = [R(100, '王舒琳'), R(100, '任雨涵'), R(100, '杨婉露'), R(100, '李思雨'), R(0, '信息安全'), R(0, '信息安全'), R(0, '信息安全')]
+    const col = detectNameColumn(regions)
+    expect(col).not.toBeNull()
+    expect(col!.length).toBe(4)
+    expect(col!.every(r => r.text.length === 3)).toBe(true)
+  })
+  it('重复字段列（4字）不判为姓名', () => {
+    const regions = [R(0, '信息安全'), R(0, '信息安全'), R(0, '信息安全'), R(0, '信息安全')]
+    expect(detectNameColumn(regions)).toBeNull()
+  })
+  it('少于 3 个 → null', () => {
+    expect(detectNameColumn([R(0, '王舒琳'), R(0, '任雨涵')])).toBeNull()
   })
 })
 
