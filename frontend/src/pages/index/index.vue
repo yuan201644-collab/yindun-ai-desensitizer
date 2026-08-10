@@ -6,6 +6,7 @@ import { useDesensitize } from '../../composables/useDesensitize'
 import { applyDesensitize, drawImageToCanvas, canvasToBlob } from '../../utils/canvas'
 import { SCENARIO_TEMPLATES, getTemplate } from '../../utils/scenarioTemplates'
 import { recognizeLocal } from '../../utils/localOCR'
+import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -20,6 +21,7 @@ const showHelp = ref(true)
 const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 const detectEmpty = ref(false)
+const complexity = ref<ComplexityResult | null>(null)
 
 function resetDetection() {
   textRegions.value = []
@@ -33,6 +35,9 @@ function applyFile(file: File) {
   activeTab.value = 'detect'
   clearRegions()
   resetDetection()
+  // 分流引导：评估图片复杂度（表格/密集 → 推荐云端）
+  complexity.value = null
+  assessComplexity(file).then(c => { complexity.value = c }).catch(() => { complexity.value = null })
 }
 
 function onFileSelected(e: Event) {
@@ -126,7 +131,7 @@ function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolea
 }
 
 function startOver() {
-  resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'
+  resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'; complexity.value = null
 }
 
 // P3 修复：脱敏后可返回选区调整（回到原图预览，保留选区）
@@ -285,6 +290,11 @@ onUnmounted(() => { resetUpload() })
       </div>
 
       <div class="control-panel">
+        <div v-if="complexity && !isProcessed" class="complexity-banner" :class="complexity.level">
+          <span class="cb-text">{{ complexity.reason }}</span>
+          <button v-if="complexity.level !== 'simple' && processingMode === 'local'" class="cb-btn" @click="processingMode = 'cloud'">改用云端</button>
+          <span v-else-if="complexity.level === 'simple'" class="cb-ok">✓ 两种模式都可用</span>
+        </div>
         <div class="image-actions" v-if="!isProcessed">
           <button class="btn btn-small" @click="triggerUpload">🔄 更换图片</button>
           <button class="btn btn-small btn-danger" @click="startOver">🗑️ 删除图片</button>
@@ -391,6 +401,13 @@ onUnmounted(() => { resetUpload() })
 .template-chip { background: #2a2a4a; color: #aaaacc; font-size: 12px; padding: 5px 12px; border-radius: 16px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
 .template-chip.active { background: rgba(108,99,255,0.2); color: #6c63ff; border-color: #6c63ff; font-weight: 600; }
 .template-desc { font-size: 11px; color: #6666aa; margin: 6px 0 2px; line-height: 1.5; }
+.complexity-banner { display: flex; flex-direction: column; gap: 6px; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; font-size: 12px; line-height: 1.5; }
+.complexity-banner.simple { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+.complexity-banner.medium { background: rgba(255,170,0,0.1); border: 1px solid rgba(255,170,0,0.4); color: #ffc94d; }
+.complexity-banner.complex { background: rgba(255,107,53,0.12); border: 1px solid rgba(255,107,53,0.4); color: #ffab91; }
+.cb-text { word-break: break-all; }
+.cb-btn { align-self: flex-start; background: #ff6b35; color: #fff; border: none; border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.cb-ok { color: #4ade80; font-size: 11px; }
 .image-actions { display: flex; gap: 8px; margin-bottom: 8px; }
 .btn-small { flex: 1; padding: 8px 0; font-size: 13px; margin: 0; }
 .btn-danger { background: #3a1a1a; color: #ff6b6b; }

@@ -60,6 +60,11 @@
 - 检测后按敏感类别分组（🪪证件/📱联系方式/📦快递单…）显示 chips，**一键全选/取消该类**，含选中数；右上「✔ 全选 / ✖ 取消全选」
 - 类别 chips 三态：全选(蓝) / 部分(黄) / 未选(灰)
 
+### 识别模式分流引导
+- 上传后轻量评估图片复杂度（边缘密度 + 网格线检测）→ simple/medium/complex
+- 简单场景：提示"两种模式都可用"；复杂版面（表格/密集文档）：提示"推荐云端识别" + 「改用云端」一键切换按钮
+- 纯函数 classifyComplexity 可单测（4 项）；无头浏览器实测名单截图正确判为 complex
+
 ### 本地 OCR 修复：hOCR 原始输出兜底
 - 用户浏览器实测：Tesseract 读到文字（data.text 有内容）但 data.lines/words 均为空（tesseract.js 词解析在部分浏览器环境失败）
 - 修复：recognizeLocal 请求 hOCR 原始输出，words/lines 都空时从 hOCR 解析 ocr_word 词框（坐标+文本+敏感分类）
