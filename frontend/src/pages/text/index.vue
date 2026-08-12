@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { DEFAULT_PATTERNS, applyMask, matchCustomWords } from '../../utils/sensitivePatterns'
 import { SCENARIO_TEMPLATES, getTemplate, filterPatternsByTemplate } from '../../utils/scenarioTemplates'
+import { enhanceContext } from '../../utils/contextEnhance'
 
 const inputText = ref('')
 // 自定义敏感词（换行/逗号分隔），不受场景模板 activeTypes 过滤影响，用户显式指定的词恒生效
@@ -19,7 +20,7 @@ watch(activeTemplate, () => {
   if (inputText.value.trim()) detectLocally()
 })
 
-interface SpanResult { start: number; end: number; type: string; category: string; riskLevel: string; matchText: string; maskChar: string }
+interface SpanResult { start: number; end: number; type: string; category: string; riskLevel: 'high' | 'medium' | 'low'; matchText: string; maskChar: string; contextConfirmed?: boolean }
 const spans = ref<SpanResult[]>([])
 const highRiskCount = computed(() => spans.value.filter(s => s.riskLevel === 'high').length)
 
@@ -47,7 +48,8 @@ function detectLocally() {
       spans.value.push({ start: cm.start, end: cm.end, type: cm.type, category: 'custom', riskLevel: 'high', matchText: cm.text, maskChar: '█' })
     }
   }
-  spans.value.sort((a, b) => a.start - b.start)
+  // 上下文关键词增强：同类别关键词语义确认+风险升级；补漏捕捉"姓名：张三/微信号/QQ"等结构隐私
+  spans.value = enhanceContext(text, spans.value)
   applyLocalMask()
 }
 
@@ -90,7 +92,7 @@ const highlightedHTML = computed(() => {
   for (const span of [...spans.value].sort((a, b) => a.start - b.start)) {
     html += escapeHTML(inputText.value.slice(lastEnd, span.start))
     const color = span.riskLevel === 'high' ? '#ff4444' : span.riskLevel === 'medium' ? '#ffaa00' : '#ffcc00'
-    html += `<mark style="background:${color}33;border-bottom:2px solid ${color};color:#fff;padding:2px 4px;border-radius:3px" title="${span.type}">${escapeHTML(span.matchText)}</mark>`
+    html += `<mark style="background:${color}33;border-bottom:2px solid ${color};color:#fff;padding:2px 4px;border-radius:3px" title="${span.type}${span.contextConfirmed ? '（上下文确认）' : ''}">${escapeHTML(span.matchText)}</mark>`
     lastEnd = span.end
   }
   html += escapeHTML(inputText.value.slice(lastEnd))
@@ -108,6 +110,7 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
       <div class="help-body">
         <p>粘贴聊天记录、订单信息或文档 → 自动 <span style="color:#ff4444">红色</span>=高风险 <span style="color:#ffaa00">黄色</span>=中风险 → 一键打码 → 复制使用</p>
         <p style="margin-top:6px;color:#8888aa;font-size:11px;">💡 支持：身份证 / 手机号 / 银行卡 / 邮箱 / 地址 / 车牌 / 快递单号 / 微信号 / QQ号</p>
+        <p style="margin-top:6px;color:#6c63ff;font-size:11px;">🔍 上下文增强：识别"姓名：张三""微信号：abc12345"等结构化隐私，且"电话/邮箱/单号"等上下文会提升风险等级</p>
         <p style="color:#22c55e;font-size:11px;">🔒 文本脱敏全部在浏览器本地完成，不上传服务器</p>
       </div>
     </div>
