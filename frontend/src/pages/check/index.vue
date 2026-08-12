@@ -8,6 +8,7 @@ const processedPreview = ref('')
 const checking = ref(false)
 const result = ref<any>(null)
 const error = ref('')
+const reportTime = ref('')
 // 图片数据源（原始 base64，无 data: 前缀）：手动上传或从脱敏页自动带入
 let originalB64 = ''
 let processedB64 = ''
@@ -36,7 +37,7 @@ async function runCheck() {
       body: JSON.stringify({ original_image_base64: originalB64, processed_image_base64: processedB64, regions: checkRegions.map(r => ({ rect: r })) }),
     })
     const data = await res.json()
-    if (data.success) { result.value = data } else { error.value = data.error || '检测失败' }
+    if (data.success) { result.value = data; reportTime.value = new Date().toLocaleString('zh-CN') } else { error.value = data.error || '检测失败' }
   } catch (e: any) { error.value = e.message || '检测请求失败，请确认后端服务已启动' } finally { checking.value = false }
 }
 
@@ -68,7 +69,7 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
 const radarRef = ref<HTMLCanvasElement | null>(null)
 const RADAR_KEYS = ['privacy', 'usability', 'texture', 'noise_control'] as const
 
-function drawRadar() {
+function drawRadar(print = false) {
   const canvas = radarRef.value
   if (!canvas || !result.value?.report) return
   const ctx = canvas.getContext('2d')
@@ -80,6 +81,11 @@ function drawRadar() {
   canvas.height = size * dpr
   ctx.scale(dpr, dpr)
 
+  // 打印用浅色调色板（白底可读）；屏幕用深色主题
+  const c = print
+    ? { grid: '#d8d8e8', label: '#555577', fill: 'rgba(108,99,255,0.18)', line: '#5a55d6', dot: '#5a55d6', value: '#3a35a8' }
+    : { grid: '#2a2a4a', label: '#aaaacc', fill: 'rgba(108,99,255,0.25)', line: '#6c63ff', dot: '#6c63ff', value: '#6c63ff' }
+
   const cx = size / 2
   const cy = size / 2
   const radius = size / 2 - 30
@@ -90,7 +96,7 @@ function drawRadar() {
   ctx.clearRect(0, 0, size, size)
 
   // 网格环（4 圈）
-  ctx.strokeStyle = '#2a2a4a'
+  ctx.strokeStyle = c.grid
   ctx.lineWidth = 1
   for (let ring = 1; ring <= 4; ring++) {
     const r = (radius * ring) / 4
@@ -125,9 +131,9 @@ function drawRadar() {
     else ctx.lineTo(x, y)
   })
   ctx.closePath()
-  ctx.fillStyle = 'rgba(108, 99, 255, 0.25)'
+  ctx.fillStyle = c.fill
   ctx.fill()
-  ctx.strokeStyle = '#6c63ff'
+  ctx.strokeStyle = c.line
   ctx.lineWidth = 2
   ctx.stroke()
 
@@ -139,7 +145,7 @@ function drawRadar() {
     const y = cy + radius * value * Math.sin(angle)
     ctx.beginPath()
     ctx.arc(x, y, 3.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#6c63ff'
+    ctx.fillStyle = c.dot
     ctx.fill()
   })
 
@@ -148,13 +154,13 @@ function drawRadar() {
     const angle = (i / n) * Math.PI * 2 - Math.PI / 2
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#aaaacc'
+    ctx.fillStyle = c.label
     ctx.font = '12px sans-serif'
     const lx = cx + (radius + 18) * Math.cos(angle)
     const ly = cy + (radius + 18) * Math.sin(angle)
     ctx.fillText(String(labels?.[key] || key), lx, ly)
     // 维度数值（沿轴内放，避免被标签遮挡）
-    ctx.fillStyle = '#6c63ff'
+    ctx.fillStyle = c.value
     ctx.font = 'bold 13px sans-serif'
     const vx = cx + radius * 0.6 * Math.cos(angle)
     const vy = cy + radius * 0.6 * Math.sin(angle)
@@ -164,8 +170,15 @@ function drawRadar() {
 
 // 结果变化时重绘雷达（等待模板渲染出 canvas）
 watch(result, () => {
-  if (result.value?.report) nextTick(drawRadar)
+  if (result.value?.report) nextTick(() => drawRadar())
 })
+
+// 打印/打印预览时切换雷达浅色调色板
+window.matchMedia('print').addEventListener('change', (e) => {
+  if (result.value?.report) nextTick(() => drawRadar(e.matches))
+})
+
+function exportPDF() { window.print() }
 </script>
 
 <template>
@@ -196,6 +209,15 @@ watch(result, () => {
       <button class="btn btn-secondary" @click="swapImages">⇄ 交换两张图</button>
     </div>
     <div class="result-panel reveal" v-if="result">
+      <div class="report-head print-only">
+        <h2 class="report-title">「隐盾」脱敏强度检测报告</h2>
+        <p class="report-meta">检测时间：{{ reportTime }} · 风险评分 {{ result.global_risk_score }} · {{ riskLabel(result.global_risk_level) }}</p>
+        <div class="report-imgs">
+          <div class="report-img"><span>原始图片</span><img :src="originalPreview" /></div>
+          <div class="report-img"><span>脱敏后图片</span><img :src="processedPreview" /></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" @click="exportPDF">🖨️ 导出 PDF 报告</button>
       <div class="score-card" :style="{ borderColor: riskLevelColor(result.global_risk_level) }">
         <span class="score-num" :style="{ color: riskLevelColor(result.global_risk_level) }">{{ result.global_risk_score }}</span>
         <span class="score-label">风险评分 (0=安全 100=危险)</span>
@@ -305,4 +327,37 @@ watch(result, () => {
 .help-header { padding: 12px 16px; font-weight: 600; color: #c0c0e0; }
 .help-body { padding: 0 16px 14px; font-size: 13px; line-height: 1.8; color: #aaaacc; }
 .help-body strong { color: #6c63ff; }
+
+/* 打印报告头（默认隐藏，仅打印/预览时显示） */
+.print-only { display: none; }
+.report-title { font-size: 20px; font-weight: 800; color: #6c63ff; margin-bottom: 6px; }
+.report-meta { font-size: 12px; color: #555577; margin-bottom: 10px; }
+.report-imgs { display: flex; gap: 12px; margin-bottom: 16px; }
+.report-img { flex: 1; }
+.report-img span { display: block; font-size: 11px; color: #6666aa; margin-bottom: 4px; }
+.report-img img { width: 100%; max-height: 220px; object-fit: contain; border: 1px solid #ddd; border-radius: 6px; background: #fafaff; }
+
+/* 打印导出 PDF 报告：浅色专业排版 */
+@media print {
+  @page { margin: 12mm; }
+  .hero, .help-card, .upload-dual, .action-row, .btn, .footer-note, .error { display: none !important; }
+  .print-only { display: block !important; }
+  .page { max-width: none; padding: 0; }
+  .result-panel { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .score-card, .radar-panel, .detail-card, .adv-panel, .adv-verdict, .adv-region, .reinforce-guide {
+    background: #fff !important; border-color: #dde0ea !important; color: #222 !important; box-shadow: none !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .score-msg, .detail-suggestion, .adv-msg, .adv-note, .metric, .guide-item, .score-label, .adv-label { color: #333 !important; }
+  .details-title, .guide-title, .detail-index, .report-title { color: #1a1a2e !important; }
+  .adv-table th, .adv-table td { color: #333 !important; border-bottom-color: #e0e0ea !important; }
+  .score-num, .score-level, .detail-risk, .adv-region-verdict, .adv-label {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .score-card, .radar-panel, .detail-card, .adv-verdict, .adv-region, .reinforce-guide, .report-head {
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  .report-head { page-break-after: avoid; }
+  .reveal, .reveal * { opacity: 1 !important; transform: none !important; animation: none !important; }
+}
 </style>

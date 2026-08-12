@@ -63,4 +63,10 @@ body {
   color: #6c63ff;
   border-bottom-color: #6c63ff;
 }
+
+/* 打印导出（强度检测 PDF 报告）：隐藏导航、转浅色底 */
+@media print {
+  .top-nav { display: none !important; }
+  body { background: #fff !important; color: #1a1a2e !important; }
+}
 </style>
