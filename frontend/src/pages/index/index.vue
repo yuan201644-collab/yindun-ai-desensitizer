@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useImageUpload } from '../../composables/useImageUpload'
 import { useOCR } from '../../composables/useOCR'
 import { useDesensitize } from '../../composables/useDesensitize'
@@ -14,6 +15,7 @@ const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
 const { selectedRegions, method, intensity, isProcessed, methodOptions, addRegion, removeRegion, clearRegions, markProcessed, resetProcessed } = useDesensitize()
 
+const router = useRouter()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const originalImage = ref('')
 const processedImage = ref('')
@@ -119,6 +121,16 @@ function onTemplateChange() {
   if (t.defaultMethod) method.value = t.defaultMethod
   if (t.defaultIntensity) intensity.value = t.defaultIntensity
   if (textRegions.value.length || objectRegions.value.length) applyTemplateAutoSelect()
+}
+
+// 首页惠民快捷场景入口：点卡片直接进入对应流程
+function pickScenario(id: string) {
+  if (id === 'llm') {
+    router.push('/text')
+  } else {
+    activeTemplate.value = id
+    onTemplateChange()
+  }
 }
 
 // P1 修复：切换脱敏方法时，同步到所有已选区域（避免"改了方法实际还是旧算法"）
@@ -304,6 +316,27 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 上传区 -->
     <div class="upload-section" v-if="uploadState.status !== 'ready'">
+      <!-- 场景入口：点场景直接进入对应流程 -->
+      <div class="scenario-entry">
+        <p class="scenario-label">🎯 选个场景，直接上传开干</p>
+        <div class="scenario-grid">
+          <div class="scenario-card" :class="{ active: activeTemplate === 'chat' }" @click="pickScenario('chat')">
+            <span class="scenario-icon">🗨️</span>
+            <span class="scenario-name">聊天截图脱敏</span>
+            <span class="scenario-desc">微信/QQ截图，挡手机号/地址</span>
+          </div>
+          <div class="scenario-card" :class="{ active: activeTemplate === 'idcard' }" @click="pickScenario('idcard')">
+            <span class="scenario-icon">🪪</span>
+            <span class="scenario-name">证件材料脱敏</span>
+            <span class="scenario-desc">身份证/成绩单/简历，保留有效信息</span>
+          </div>
+          <div class="scenario-card" @click="pickScenario('llm')">
+            <span class="scenario-icon">🤖</span>
+            <span class="scenario-name">AI 对话前置脱敏</span>
+            <span class="scenario-desc">发给大模型前先过滤隐私</span>
+          </div>
+        </div>
+      </div>
       <div class="upload-zone scale-in" @click="triggerUpload" @dragover.prevent @drop.prevent="onDrop">
         <span class="upload-icon">📤</span>
         <p class="upload-text">点击上传或拖拽图片到此处</p>
@@ -459,6 +492,17 @@ onUnmounted(() => { resetUpload() })
 .mode-selector { margin-top: 16px; background: #1a1a2e; border-radius: 12px; padding: 16px; }
 .mode-label { font-weight: 600; font-size: 14px; margin-bottom: 8px; }
 .mode-option { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: #b0b0d0; font-size: 13px; cursor: pointer; }
+/* 场景入口卡片 */
+.scenario-entry { margin-bottom: 16px; }
+.scenario-label { font-weight: 600; font-size: 14px; margin-bottom: 10px; color: #c0c0e0; }
+.scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.scenario-card { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px 10px; cursor: pointer; text-align: center; transition: all 0.15s; }
+.scenario-card:hover { border-color: #6c63ff; background: rgba(108,99,255,0.05); }
+.scenario-card.active { border-color: #6c63ff; background: rgba(108,99,255,0.18); box-shadow: inset 0 0 0 1px #6c63ff; }
+.scenario-icon { font-size: 22px; }
+.scenario-name { font-size: 13px; font-weight: 600; color: #c0c0e0; }
+.scenario-card.active .scenario-name { color: #6c63ff; }
+.scenario-desc { font-size: 11px; color: #6666aa; line-height: 1.4; }
 .workspace { display: flex; gap: 16px; margin-top: 16px; }
 .image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: hidden; min-height: 300px; }
 .preview-canvas, .preview-image { width: 100%; display: block; }
@@ -503,6 +547,7 @@ onUnmounted(() => { resetUpload() })
   .control-panel { width: 100%; }
   .image-panel { min-height: 220px; }
   .steps .step-line { width: 30px; }
+  .scenario-grid { grid-template-columns: 1fr; }
 }
 .method-option { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid #2a2a4a; gap: 2px; cursor: pointer; }
 .method-desc { font-size: 11px; color: #6666aa; }
