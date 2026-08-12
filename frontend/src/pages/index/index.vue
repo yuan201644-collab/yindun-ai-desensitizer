@@ -27,6 +27,11 @@ const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 const detectEmpty = ref(false)
 const complexity = ref<ComplexityResult | null>(null)
+// 手动画框：人工二次修正（OCR 漏检时手动补框）
+const drawMode = ref(false)
+const drawing = ref(false)
+const drawBox = ref<{ x: number; y: number; w: number; h: number } | null>(null)
+let drawStart: { x: number; y: number } | null = null
 // 后端 OCR 加载计时与预估（预估来自历史真实耗时，非臆测）
 const loadingElapsed = ref(0)
 const loadingEstimate = ref<number | null>(null)
@@ -168,6 +173,51 @@ function toggleRegion(region: {x:number,y:number,w:number,h:number}) {
 
 function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolean {
   return selectedRegions.value.some(r => r.x === region.x && r.y === region.y)
+}
+
+// ---------- 手动画框 ----------
+/** 把鼠标在预览区的 client 坐标映射为原图像素坐标（以 .preview-image 的显示区域为基准） */
+function panelCoords(e: MouseEvent) {
+  const img = document.querySelector<HTMLElement>('.preview-image')
+  if (!img) return { x: 0, y: 0 }
+  const r = img.getBoundingClientRect()
+  return {
+    x: (e.clientX - r.left) / r.width * uploadState.value.width,
+    y: (e.clientY - r.top) / r.height * uploadState.value.height,
+  }
+}
+
+function onPanelDown(e: MouseEvent) {
+  if (!drawMode.value) return
+  drawing.value = true
+  drawStart = panelCoords(e)
+}
+
+function onPanelMove(e: MouseEvent) {
+  if (!drawing.value || !drawStart) return
+  const cur = panelCoords(e)
+  const x0 = drawStart.x, y0 = drawStart.y, x1 = cur.x, y1 = cur.y
+  drawBox.value = {
+    x: Math.min(x0, x1),
+    y: Math.min(y0, y1),
+    w: Math.abs(x1 - x0),
+    h: Math.abs(y1 - y0),
+  }
+}
+
+function onPanelUp() {
+  if (!drawing.value) return
+  drawing.value = false
+  if (drawBox.value && drawBox.value.w > 5 && drawBox.value.h > 5) {
+    addRegion({
+      x: Math.round(drawBox.value.x),
+      y: Math.round(drawBox.value.y),
+      w: Math.round(drawBox.value.w),
+      h: Math.round(drawBox.value.h),
+    })
+  }
+  drawBox.value = null
+  drawStart = null
 }
 
 // 删除图片：全部重置（回到上传）
@@ -356,7 +406,7 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 工作区 -->
     <div class="workspace" v-if="uploadState.status === 'ready'">
-      <div class="image-panel fade-in">
+      <div class="image-panel fade-in" @mousedown="onPanelDown" @mousemove="onPanelMove" @mouseup="onPanelUp">
         <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
         <img v-show="!isProcessed" :src="uploadState.previewUrl" class="preview-image" />
         <div v-if="!isProcessed && (textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
@@ -388,6 +438,13 @@ onUnmounted(() => { resetUpload() })
             @click.stop="toggleRegion({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
             <span class="region-label">{{ region.label }}</span>
           </div>
+          <!-- 手动画框：拖拽中的临时框（原图像素坐标） -->
+          <div v-if="drawBox" class="region-box selected draw-box" :style="{
+            left: drawBox.x / uploadState.width * 100 + '%',
+            top: drawBox.y / uploadState.height * 100 + '%',
+            width: drawBox.w / uploadState.width * 100 + '%',
+            height: drawBox.h / uploadState.height * 100 + '%',
+          }"></div>
         </div>
         <div v-if="ocrLoading" class="loading-overlay fade-in">
           <div class="scan-frame"><div class="scan-line"></div></div>
@@ -416,6 +473,12 @@ onUnmounted(() => { resetUpload() })
 
         <div v-if="(textRegions.length > 0 || objectRegions.length > 0) && !isProcessed" class="regions-list">
           <p class="panel-title">检测到 {{ textRegions.length }} 处文本<span v-if="objectRegions.length"> + {{ objectRegions.length }} 个目标</span></p>
+          <div class="draw-control">
+            <button class="btn btn-draw" :class="{ active: drawMode }" @click="drawMode = !drawMode">
+              {{ drawMode ? '画框中：拖拽画新框' : '✏️ 手动画框' }}
+            </button>
+            <p v-if="drawMode" class="draw-hint">在图片上拖拽，松开即加入新脱敏框</p>
+          </div>
           <div class="category-select" v-if="categoryGroups.length">
             <p class="section-title">⚡ 按类别全选</p>
             <div class="category-chips">
@@ -519,6 +582,8 @@ onUnmounted(() => { resetUpload() })
 .region-box.risk-medium { border-color: #ffaa00; background: rgba(255,170,0,0.10); }
 .region-box.selected { border-color: #6c63ff; background: rgba(108,99,255,0.20); border-width: 3px; box-shadow: 0 0 8px rgba(108,99,255,0.4); }
 .region-box.object-region { border-color: #00ccff; background: rgba(0,204,255,0.08); }
+/* 手动画框：半透明主题色 + 虚线边框（区别于已选实线框） */
+.draw-box { border-style: dashed; border-color: #6c63ff; background: rgba(108,99,255,0.25); box-shadow: none; }
 .region-label { font-size: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; display: block; }
 .control-panel { width: 280px; flex-shrink: 0; background: #1a1a2e; border-radius: 12px; padding: 16px; }
 .panel-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
@@ -538,6 +603,11 @@ onUnmounted(() => { resetUpload() })
 .btn-small { flex: 1; padding: 8px 0; font-size: 13px; margin: 0; }
 .btn-danger { background: #3a1a1a; color: #ff6b6b; }
 .btn-danger:hover { background: #4a2020; }
+/* 手动画框切换按钮 */
+.draw-control { margin-bottom: 10px; }
+.btn-draw { background: #2a2a4a; color: #c0c0e0; border: 1px solid #3a3a5a; margin: 0; }
+.btn-draw.active { background: rgba(108,99,255,0.25); color: #6c63ff; border-color: #6c63ff; }
+.draw-hint { font-size: 11px; color: #6c63ff; margin-top: 4px; }
 .category-select { margin-bottom: 4px; }
 .category-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .category-chip { background: #2a2a4a; color: #aaaacc; font-size: 12px; padding: 5px 10px; border-radius: 14px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
