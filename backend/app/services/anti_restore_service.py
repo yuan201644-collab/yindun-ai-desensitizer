@@ -172,9 +172,9 @@ class AntiRestoreService:
 
         # 具体加固建议（按全局风险等级 + 对抗判定汇总）
         if global_level == "danger" or adv_verdict != "safe":
-            concrete_suggestion = "风险偏高，存在 AI 还原可能。建议切换【不可逆脱敏模式】并提高强度，必要时调高噪声等级"
+            concrete_suggestion = "风险偏高，存在 AI 还原可能。建议切换【不可逆脱敏模式·保护等级3】后重新处理"
         elif global_level == "warning":
-            concrete_suggestion = "建议改用【不可逆脱敏】或把脱敏强度提高到 80%+，可显著降低还原风险"
+            concrete_suggestion = "建议改用【不可逆脱敏】并选择保护等级2/3，可显著降低还原风险"
         else:
             concrete_suggestion = "当前脱敏安全，可放心使用；如需更强保护可切换不可逆模式"
 

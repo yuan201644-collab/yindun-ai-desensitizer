@@ -14,6 +14,7 @@ import { getOcrEstimateMs, recordOcrDuration } from '../../utils/ocrStats'
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
 const { selectedRegions, method, intensity, isProcessed, methodOptions, addRegion, removeRegion, clearRegions, markProcessed, resetProcessed } = useDesensitize()
+const irreversibleLevel = ref(1) // 不可逆保护等级 1-3（1/2/3 轮打散）
 
 const router = useRouter()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -144,7 +145,7 @@ async function runDesensitize() {
   const ctx = canvasRef.value.getContext('2d')!
   originalImage.value = canvasRef.value.toDataURL('image/png').split(',')[1]
   selectedRegions.value.forEach((region) => {
-    applyDesensitize(ctx, region, region.method || method.value, intensity.value)
+    applyDesensitize(ctx, region, region.method || method.value, intensity.value, irreversibleLevel.value)
   })
   processedImage.value = canvasRef.value.toDataURL('image/png').split(',')[1]
   markProcessed()
@@ -444,6 +445,12 @@ onUnmounted(() => { resetUpload() })
           <div class="intensity-slider">
             <p class="section-title">脱敏强度: {{ Math.round(intensity * 100) }}%</p>
             <input type="range" v-model.number="intensity" min="0.1" max="1.0" step="0.05" />
+          </div>
+          <div class="level-select" v-if="method === 'irreversible'">
+            <p class="section-title">不可逆保护等级</p>
+            <div class="template-list">
+              <span v-for="lv in [1,2,3]" :key="lv" class="template-chip chip-pop" :class="{ active: irreversibleLevel === lv }" @click="irreversibleLevel = lv">等级{{ lv }}</span>
+            </div>
           </div>
           <p class="selected-count">已选 {{ selectedRegions.length }} 个脱敏区域<span v-if="selectedRegions.length === 0" class="hint-text">（点击图片上的框选择）</span></p>
           <button class="btn btn-warn" @click="runDesensitize" :disabled="selectedRegions.length === 0">🔒 应用脱敏 ({{ selectedRegions.length }} 处)</button>

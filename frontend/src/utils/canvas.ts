@@ -29,7 +29,8 @@ export function applyDesensitize(
   ctx: CanvasRenderingContext2D,
   region: Region,
   method: DesensitizeMethod = 'pixelate',
-  intensity: number = 1.0 // 0.0-1.0 强度
+  intensity: number = 1.0, // 0.0-1.0 强度
+  level: number = 1 // 不可逆保护等级 1-3
 ): void {
   const { x, y, w, h } = region
   const imageData = ctx.getImageData(x, y, w, h)
@@ -45,7 +46,7 @@ export function applyDesensitize(
       break
     case 'irreversible':
       // patch 自适应区域尺寸：小区域 → 整个区域一个 patch；同时保留 intensity 缩放
-      irreversibleRegion(imageData, w, h, Math.max(Math.min(w, h), Math.floor(6 * intensity)))
+      irreversibleRegion(imageData, w, h, Math.max(Math.min(w, h), Math.floor(6 * intensity)), level)
       break
   }
 
@@ -135,39 +136,45 @@ function irreversibleRegion(
   imageData: ImageData,
   width: number,
   height: number,
-  patchSize: number
+  patchSize: number,
+  level: number = 1 // 保护等级 1-3：轮数越多、噪声越大，打散越彻底
 ): void {
   const data = imageData.data
-  // Fisher-Yates 行级重排
-  for (let py = 0; py < height; py += patchSize) {
-    for (let px = 0; px < width; px += patchSize) {
-      const pw = Math.min(patchSize, width - px)
-      const ph = Math.min(patchSize, height - py)
-      const pixels: number[][] = []
+  const passes = level // 1/2/3 轮打散
+  const noiseBase = 8 * level // 噪声范围 ±8/16/24
 
-      for (let y = 0; y < ph; y++) {
-        for (let x = 0; x < pw; x++) {
-          const idx = ((py + y) * width + (px + x)) * 4
-          pixels.push([data[idx], data[idx + 1], data[idx + 2], data[idx + 3]])
+  // 多轮打散：Fisher-Yates 行级重排 + 写回伪随机噪声
+  for (let pass = 0; pass < passes; pass++) {
+    for (let py = 0; py < height; py += patchSize) {
+      for (let px = 0; px < width; px += patchSize) {
+        const pw = Math.min(patchSize, width - px)
+        const ph = Math.min(patchSize, height - py)
+        const pixels: number[][] = []
+
+        for (let y = 0; y < ph; y++) {
+          for (let x = 0; x < pw; x++) {
+            const idx = ((py + y) * width + (px + x)) * 4
+            pixels.push([data[idx], data[idx + 1], data[idx + 2], data[idx + 3]])
+          }
         }
-      }
 
-      // 随机重排
-      for (let i = pixels.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pixels[i], pixels[j]] = [pixels[j], pixels[i]]
-      }
+        // 随机重排
+        for (let i = pixels.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pixels[i], pixels[j]] = [pixels[j], pixels[i]]
+        }
 
-      // 写回 + 伪随机噪声
-      let pi = 0
-      for (let y = 0; y < ph; y++) {
-        for (let x = 0; x < pw; x++) {
-          const idx = ((py + y) * width + (px + x)) * 4
-          const noise = Math.floor(Math.random() * 16) - 8
-          data[idx] = Math.min(255, Math.max(0, pixels[pi][0] + noise))
-          data[idx + 1] = Math.min(255, Math.max(0, pixels[pi][1] + noise))
-          data[idx + 2] = Math.min(255, Math.max(0, pixels[pi][2] + noise))
-          pi++
+        // 写回 + 伪随机噪声
+        let pi = 0
+        for (let y = 0; y < ph; y++) {
+          for (let x = 0; x < pw; x++) {
+            const idx = ((py + y) * width + (px + x)) * 4
+            const noise = Math.floor(Math.random() * noiseBase * 2) - noiseBase
+            data[idx] = Math.min(255, Math.max(0, pixels[pi][0] + noise))
+            data[idx + 1] = Math.min(255, Math.max(0, pixels[pi][1] + noise))
+            data[idx + 2] = Math.min(255, Math.max(0, pixels[pi][2] + noise))
+            pi++
+          }
         }
       }
     }
