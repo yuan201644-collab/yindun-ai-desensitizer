@@ -329,6 +329,12 @@ onUnmounted(() => { resetUpload() })
     <div class="hero">
       <h1 class="hero-title fade-up">🛡️ 「隐盾」图片智能脱敏</h1>
       <p class="hero-sub fade-up" style="animation-delay:0.08s">上传图片 → 自动识别敏感信息 → 一键脱敏 → 安全分享</p>
+      <div class="trust-badges fade-up" style="animation-delay:0.16s">
+        <span class="trust-badge">🔒 图片不出设备 · 本地优先</span>
+        <span class="trust-badge">🧪 脱敏强度可检测</span>
+        <span class="trust-badge">🚫 不可逆算法 AI 还原不了</span>
+        <span class="trust-badge">⚡ 免注册 · 免费 · 即用即走</span>
+      </div>
     </div>
 
     <!-- 使用说明 -->
@@ -397,6 +403,7 @@ onUnmounted(() => { resetUpload() })
         <p class="mode-label">识别模式：</p>
         <label class="mode-option"><input type="radio" v-model="processingMode" value="cloud" /> 精准增强（PaddleOCR · 高精度）</label>
         <label class="mode-option"><input type="radio" v-model="processingMode" value="local" /> 本地处理（Tesseract WASM · 图片不出设备）</label>
+        <p class="trust-hint">{{ processingMode === 'local' ? '🔒 本地处理：图片在浏览器内识别，全程不出设备' : '🔒 精准增强：图片上传后端识别，处理完即用即弃，不留存' }}</p>
       </div>
       <div v-if="uploadState.status === 'error'" class="error-msg">⚠️ {{ uploadState.errorMessage }}</div>
     </div>
@@ -521,6 +528,7 @@ onUnmounted(() => { resetUpload() })
 
         <div v-if="isProcessed" class="result-panel scale-in">
           <p class="success-msg">✅ 脱敏完成</p>
+          <p class="privacy-note">{{ processingMode === 'local' ? '🔒 本次处理全程在本机完成，图片未上传' : '🔒 原始图片已处理完毕，服务器不留存' }}</p>
           <p class="result-info">共处理 {{ selectedRegions.length }} 处敏感信息</p>
           <button class="btn btn-primary" @click="downloadImage">💾 下载图片</button>
           <button class="btn btn-secondary" @click="backToSelect">↩️ 返回选区调整</button>
@@ -546,6 +554,10 @@ onUnmounted(() => { resetUpload() })
 .hero { text-align: center; padding: 24px 0; }
 .hero-title { font-size: 28px; font-weight: 700; color: #e0e0f0; }
 .hero-sub { color: #8888aa; font-size: 14px; margin-top: 8px; }
+.trust-badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.trust-badge { font-size: 12px; color: #b0d0ff; background: rgba(70,120,255,0.12); border: 1px solid rgba(70,120,255,0.3); border-radius: 999px; padding: 5px 12px; }
+.trust-hint { font-size: 11px; color: #22c55e; margin-top: 8px; }
+.privacy-note { font-size: 11px; color: #22c55e; margin: 4px 0 10px; }
 .steps { display: flex; align-items: center; justify-content: center; gap: 0; margin: 16px 0 24px; }
 .step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .step-num { width: 36px; height: 36px; border-radius: 50%; background: #2a2a4a; color: #8888aa; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
