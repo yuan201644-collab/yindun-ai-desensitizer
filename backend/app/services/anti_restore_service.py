@@ -99,6 +99,9 @@ class AntiRestoreService:
             "risk_level": risk_level,
             "suggestion": suggestion,
             "adversarial": adversarial,
+            "report": AntiRestoreService._build_report(
+                ssim_val, psnr_val, entropy, adversarial["verdict"]
+            ),
         }
 
     @staticmethod
@@ -162,6 +165,19 @@ class AntiRestoreService:
             adv_verdict = "safe"
             adv_msg = "✅ 还原攻击全部失败——即使经过超分/去模糊还原，仍无法恢复原始敏感信息"
 
+        # 全局报告：基于各区域平均指标推导 4 维雷达
+        avg_ssim = sum(r.get("ssim", 0) for r in region_results) / len(region_results) if region_results else 0.0
+        avg_psnr = sum(r.get("psnr", 0) for r in region_results) / len(region_results) if region_results else 0.0
+        avg_entropy = sum(r.get("texture_entropy", 0) for r in region_results) / len(region_results) if region_results else 0.0
+
+        # 具体加固建议（按全局风险等级 + 对抗判定汇总）
+        if global_level == "danger" or adv_verdict != "safe":
+            concrete_suggestion = "风险偏高，存在 AI 还原可能。建议切换【不可逆脱敏模式】并提高强度，必要时调高噪声等级"
+        elif global_level == "warning":
+            concrete_suggestion = "建议改用【不可逆脱敏】或把脱敏强度提高到 80%+，可显著降低还原风险"
+        else:
+            concrete_suggestion = "当前脱敏安全，可放心使用；如需更强保护可切换不可逆模式"
+
         return {
             "global_risk_score": avg_risk,
             "global_risk_level": global_level,
@@ -172,6 +188,8 @@ class AntiRestoreService:
                 "verdict": adv_verdict,
                 "message": adv_msg,
             },
+            "report": AntiRestoreService._build_report(avg_ssim, avg_psnr, avg_entropy, adv_verdict),
+            "concrete_suggestion": concrete_suggestion,
         }
 
     # --- 内部方法 ---
@@ -204,6 +222,34 @@ class AntiRestoreService:
         # 加权综合 (SSIM 权重最高 — 结构信息最关键)
         score = ssim_risk * 0.5 + psnr_risk * 0.25 + entropy_risk * 0.25
         return int(min(100, max(0, score)))
+
+    @staticmethod
+    def _build_report(ssim_val: float, psnr_val: float, entropy: float, adv_verdict: str) -> dict:
+        """构建 4 维综合评估报告（供前端雷达图使用），各维度 0-100。
+        - privacy 隐私防护：SSIM 低 + 对抗 safe → 高
+        - usability 内容可用性：PSNR 高（变化小）→ 高
+        - texture 纹理保留：熵高（纹理细节多）→ 高
+        - noise_control 噪声控制：PSNR 高（噪声小）→ 高
+        """
+        privacy = int(max(0, min(100, (1 - ssim_val) * 60 + (40 if adv_verdict == "safe" else 0))))
+        usability = int(max(0, min(100, psnr_val * 3)))
+        texture = int(max(0, min(100, entropy / 8 * 100)))
+        noise_control = int(max(0, min(100, min(psnr_val, 50) / 50 * 100)))
+
+        return {
+            "dimensions": {
+                "privacy": privacy,
+                "usability": usability,
+                "texture": texture,
+                "noise_control": noise_control,
+            },
+            "labels": {
+                "privacy": "隐私防护",
+                "usability": "内容可用性",
+                "texture": "纹理保留",
+                "noise_control": "噪声控制",
+            },
+        }
 
     @staticmethod
     def _safe_result(message: str) -> dict:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { BASE_URL } from '../../utils/api'
 import { takeCheckImages, takeCheckRegions } from '../../utils/checkTransfer'
 
@@ -63,6 +63,109 @@ onMounted(() => {
 function riskLevelColor(level: string): string { if (level==='safe') return '#22c55e'; if (level==='warning') return '#ffaa00'; return '#ff4444' }
 function riskLabel(level: string): string { if (level==='safe') return '🟢 安全'; if (level==='warning') return '🟡 警告'; return '🔴 危险' }
 const advRegions = computed(() => (result.value?.region_details || []).filter((d: any) => d.adversarial?.attacks?.length))
+
+// 📊 综合评估雷达（4 维：隐私防护 / 内容可用性 / 纹理保留 / 噪声控制）
+const radarRef = ref<HTMLCanvasElement | null>(null)
+const RADAR_KEYS = ['privacy', 'usability', 'texture', 'noise_control'] as const
+
+function drawRadar() {
+  const canvas = radarRef.value
+  if (!canvas || !result.value?.report) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const size = canvas.clientWidth || 300
+  const dpr = window.devicePixelRatio || 1
+  canvas.width = size * dpr
+  canvas.height = size * dpr
+  ctx.scale(dpr, dpr)
+
+  const cx = size / 2
+  const cy = size / 2
+  const radius = size / 2 - 30
+  const dims = result.value.report.dimensions
+  const labels = result.value.report.labels
+  const n = RADAR_KEYS.length
+
+  ctx.clearRect(0, 0, size, size)
+
+  // 网格环（4 圈）
+  ctx.strokeStyle = '#2a2a4a'
+  ctx.lineWidth = 1
+  for (let ring = 1; ring <= 4; ring++) {
+    const r = (radius * ring) / 4
+    ctx.beginPath()
+    for (let i = 0; i <= n; i++) {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+      const x = cx + r * Math.cos(angle)
+      const y = cy + r * Math.sin(angle)
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+
+  // 4 条坐标轴（每轴 90°）
+  for (let i = 0; i < n; i++) {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle))
+    ctx.stroke()
+  }
+
+  // 数据多边形
+  ctx.beginPath()
+  RADAR_KEYS.forEach((key, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    const value = (Number(dims?.[key]) || 0) / 100
+    const x = cx + radius * value * Math.cos(angle)
+    const y = cy + radius * value * Math.sin(angle)
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(108, 99, 255, 0.25)'
+  ctx.fill()
+  ctx.strokeStyle = '#6c63ff'
+  ctx.lineWidth = 2
+  ctx.stroke()
+
+  // 顶点圆点
+  RADAR_KEYS.forEach((key, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    const value = (Number(dims?.[key]) || 0) / 100
+    const x = cx + radius * value * Math.cos(angle)
+    const y = cy + radius * value * Math.sin(angle)
+    ctx.beginPath()
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2)
+    ctx.fillStyle = '#6c63ff'
+    ctx.fill()
+  })
+
+  // 维度标签 + 数值
+  RADAR_KEYS.forEach((key, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#aaaacc'
+    ctx.font = '12px sans-serif'
+    const lx = cx + (radius + 18) * Math.cos(angle)
+    const ly = cy + (radius + 18) * Math.sin(angle)
+    ctx.fillText(String(labels?.[key] || key), lx, ly)
+    // 维度数值（沿轴内放，避免被标签遮挡）
+    ctx.fillStyle = '#6c63ff'
+    ctx.font = 'bold 13px sans-serif'
+    const vx = cx + radius * 0.6 * Math.cos(angle)
+    const vy = cy + radius * 0.6 * Math.sin(angle)
+    ctx.fillText(String(dims?.[key] ?? 0), vx, vy)
+  })
+}
+
+// 结果变化时重绘雷达（等待模板渲染出 canvas）
+watch(result, () => {
+  if (result.value?.report) nextTick(drawRadar)
+})
 </script>
 
 <template>
@@ -98,6 +201,11 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
         <span class="score-label">风险评分 (0=安全 100=危险)</span>
         <span class="score-level" :style="{ color: riskLevelColor(result.global_risk_level) }">{{ riskLabel(result.global_risk_level) }}</span>
         <span class="score-msg">{{ result.global_message }}</span>
+      </div>
+      <div class="radar-panel reveal" v-if="result.report" style="animation-delay:0.05s">
+        <h3 class="details-title">📊 综合评估雷达</h3>
+        <canvas ref="radarRef" class="radar-canvas"></canvas>
+        <p class="suggestion">💡 {{ result.concrete_suggestion }}</p>
       </div>
       <div class="region-details stagger" v-if="result.region_details?.length">
         <h3 class="details-title">📊 逐区域分析 ({{ result.total_regions_checked }} 处)</h3>
@@ -169,6 +277,9 @@ const advRegions = computed(() => (result.value?.region_details || []).filter((d
 .score-card { text-align: center; padding: 32px; border: 3px solid #3a3a5a; border-radius: 16px; background: #1a1a2e; margin: 16px 0; }
 .score-num { font-size: 64px; font-weight: 800; display: block; } .score-label { color: #8888aa; font-size: 13px; display: block; margin: 4px 0; }
 .score-level { font-size: 20px; font-weight: 700; display: block; margin: 8px 0; } .score-msg { color: #aaaacc; font-size: 14px; margin-top: 8px; display: block; }
+.radar-panel { background: #1a1a2e; border: 1px solid #3a3a5a; border-radius: 12px; padding: 16px; margin: 16px 0; text-align: center; }
+.radar-canvas { width: 100%; max-width: 360px; height: 280px; margin: 8px auto; display: block; }
+.suggestion { margin-top: 10px; font-size: 13px; color: #b0b0d0; line-height: 1.6; }
 .region-details { margin: 20px 0; } .details-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .detail-card { background: #1a1a2e; border-radius: 10px; border-left: 4px solid #3a3a5a; padding: 14px; margin: 8px 0; }
 .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
