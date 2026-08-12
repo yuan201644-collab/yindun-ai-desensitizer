@@ -10,6 +10,7 @@ import { recognizeLocal, detectNameColumn } from '../../utils/localOCR'
 import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
 import { setCheckImages, setCheckRegions } from '../../utils/checkTransfer'
 import { getOcrEstimateMs, recordOcrDuration } from '../../utils/ocrStats'
+import { hitTestRegions, createRegionCycle, type Rect } from '../../utils/regionSelect'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -173,6 +174,34 @@ function toggleRegion(region: {x:number,y:number,w:number,h:number}) {
 
 function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolean {
   return selectedRegions.value.some(r => r.x === region.x && r.y === region.y)
+}
+
+// ---------- 重叠框循环选择 ----------
+// 多个框重叠时浏览器命中测试只把点击交给最上层框（DOM 最后=通常最大），被覆盖的小框点不到。
+// 按点击点收集所有覆盖框，同一位置连续点击用游标依次循环切换选择。
+const overlapHint = ref(false)
+let overlapHintTimer: ReturnType<typeof setTimeout> | null = null
+const regionCycle = createRegionCycle()
+
+function getOverlappingRegions(p: { x: number; y: number }): Rect[] {
+  const all: Rect[] = []
+  textRegions.value.forEach(r => all.push({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  objectRegions.value.forEach(r => all.push({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+  return hitTestRegions(p, all)
+}
+
+function handleRegionClick(e: MouseEvent, region: Rect) {
+  const p = panelCoords(e)
+  const stack = getOverlappingRegions(p)
+  if (stack.length <= 1) {
+    regionCycle.reset()
+    toggleRegion(region)
+    return
+  }
+  if (overlapHintTimer) clearTimeout(overlapHintTimer)
+  overlapHint.value = true
+  overlapHintTimer = setTimeout(() => { overlapHint.value = false }, 2500)
+  toggleRegion(regionCycle.next(stack, p))
 }
 
 // ---------- 手动画框 ----------
@@ -431,7 +460,7 @@ onUnmounted(() => { resetUpload() })
               width: (region.rect.w / uploadState.width * 100) + '%',
               height: (region.rect.h / uploadState.height * 100) + '%',
             }"
-            @click.stop="toggleRegion({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
+            @click.stop="handleRegionClick($event, {x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
             <span class="region-label">{{ region.sensitive?.object_label || region.sensitive?.type || region.text }}</span>
           </div>
           <div v-for="(region, i) in objectRegions" :key="'o'+i" class="region-box object-region"
@@ -442,7 +471,7 @@ onUnmounted(() => { resetUpload() })
               width: (region.rect.w / uploadState.width * 100) + '%',
               height: (region.rect.h / uploadState.height * 100) + '%',
             }"
-            @click.stop="toggleRegion({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
+            @click.stop="handleRegionClick($event, {x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
             <span class="region-label">{{ region.label }}</span>
           </div>
           <!-- 手动画框：拖拽中的临时框（原图像素坐标） -->
@@ -523,6 +552,7 @@ onUnmounted(() => { resetUpload() })
             </div>
           </div>
           <p class="selected-count">已选 {{ selectedRegions.length }} 个脱敏区域<span v-if="selectedRegions.length === 0" class="hint-text">（点击图片上的框选择）</span></p>
+          <p v-if="overlapHint" class="overlap-hint">↻ 该处有多个重叠框，可再点同一位置切换选择</p>
           <button class="btn btn-warn" @click="runDesensitize" :disabled="selectedRegions.length === 0">🔒 应用脱敏 ({{ selectedRegions.length }} 处)</button>
         </div>
 
@@ -642,6 +672,7 @@ onUnmounted(() => { resetUpload() })
 .method-desc { font-size: 11px; color: #6666aa; }
 .selected-count { font-size: 13px; color: #b0b0d0; margin: 12px 0; }
 .hint-text { color: #6666aa; font-size: 11px; }
+.overlap-hint { font-size: 11px; color: #ffaa00; margin: 4px 0 8px; }
 .btn { display: block; width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; margin: 8px 0; transition: all 0.15s; }
 .btn-primary { background: #6c63ff; color: #fff; }
 .btn-primary:hover { background: #5a52e0; }
