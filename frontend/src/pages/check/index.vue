@@ -284,7 +284,7 @@ function exportPDF() {
       </div>
     </div>
     <div v-if="error" class="error">{{ error }}</div>
-    <div class="footer-note"><p>检测引擎基于 SSIM/PSNR/纹理熵 + 对抗还原测试（超分/去模糊/边缘增强），以还原手法检验脱敏不可逆性</p></div>
+    <div class="footer-note"><p>检测引擎基于 SSIM/PSNR/纹理熵 + 对抗还原测试（超分/去模糊/边缘增强），以还原手法检验脱敏不可逆性</p><p class="footer-tip">🖨️ 检测完成后可点击「导出 PDF 报告」打印留存</p></div>
   </div>
 </template>
 
@@ -333,6 +333,7 @@ function exportPDF() {
 .guide-title { font-size: 16px; font-weight: 600; margin-bottom: 10px; } .guide-item { font-size: 13px; color: #aaaacc; padding: 3px 0; }
 .error { color: #ff4444; font-size: 13px; text-align: center; margin: 12px 0; }
 .footer-note { text-align: center; padding: 24px; color: #6666aa; font-size: 12px; }
+.footer-tip { margin-top: 6px; color: #6c63ff; }
 .help-card { background: linear-gradient(135deg, #1a1a3e, #1a1a2e); border: 1px solid #2a2a4a; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
 .help-header { padding: 12px 16px; font-weight: 600; color: #c0c0e0; }
 .help-body { padding: 0 16px 14px; font-size: 13px; line-height: 1.8; color: #aaaacc; }
