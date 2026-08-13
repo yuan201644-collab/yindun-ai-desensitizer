@@ -6,7 +6,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-MODEL="${ARCHITECT_MODEL:-deepseek-v4-pro}"
+MODEL="${ARCHITECT_MODEL:-deepseek-v4-pro[1m]}"
 PROMPT=".agent-workflow/architect_prompt.md"
 
 echo "═══════════════════════════════════════════════"
@@ -16,6 +16,8 @@ echo "  · 你负责 planning（写方案）和 testing（跑测试验收）"
 echo "  · 启动后 claude 自动加载角色提示词，并读 status.json 判断当前阶段"
 echo "  · 若当前是 coding 阶段：会提示你去工程师终端，不要越权动手"
 echo "  · 干完活按提示词更新 status.json 并告诉你下一步切到哪个终端"
+echo "  · 新任务：把 .agent-workflow/task.md 改成需求，并执行下面命令置为 planning："
+echo "      sed -i 's/\"phase\": *\"[^\"]*\"/\"phase\": \"planning\"/' .agent-workflow/status.json"
 echo ""
 
 if [ ! -f "$PROMPT" ]; then
