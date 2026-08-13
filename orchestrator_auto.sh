@@ -105,7 +105,7 @@ save_failure_snapshot() {
     echo "🕓 失败现场快照已存: $snap"
 }
 
-echo "🚀 全自动工作流启动（v2：异常恢复 / 可观测性 / 成本控制）..."
+echo "🚀 全自动工作流启动（v3：模型路由 + 异常恢复 / 可观测性 / 成本控制）..."
 echo ""
 
 PREV_STATUS=""
