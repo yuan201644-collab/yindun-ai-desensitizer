@@ -1,0 +1,26 @@
+#!/bin/bash
+# 隐盾 双终端工作流 — 终端 B：工程师（DeepSeek V4 Flash）
+# 职责：按方案写代码 / 按测试报告修 bug（coding）
+# 用法：./tools/start_engineer.sh
+# 模型可覆盖：ENGINEER_MODEL=deepseek-v4-flash ./tools/start_engineer.sh
+set -e
+cd "$(dirname "$0")/.."
+
+MODEL="${ENGINEER_MODEL:-deepseek-v4-flash[1m]}"
+PROMPT=".agent-workflow/engineer_prompt.md"
+
+echo "═══════════════════════════════════════════════"
+echo "  🔧  工程师 终端（模型: $MODEL）"
+echo "═══════════════════════════════════════════════"
+echo "  · 你负责 coding（按方案写代码、修 bug）"
+echo "  · 启动后 claude 自动加载角色提示词，并读 status.json 判断当前阶段"
+echo "  · 若当前不是 coding 阶段：会提示你去架构师终端，不要越权动手"
+echo "  · 干完活按提示词更新 status.json 并告诉你下一步切到哪个终端"
+echo ""
+
+if [ ! -f "$PROMPT" ]; then
+  echo "❌ 找不到 $PROMPT（请在项目根目录运行）" >&2
+  exit 1
+fi
+
+exec claude --model "$MODEL" "$(cat "$PROMPT")"

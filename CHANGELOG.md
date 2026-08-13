@@ -44,6 +44,12 @@
 - 重叠点击时提示「↻ 该处有多个重叠框，可再点同一位置切换选择」
 - 纯逻辑抽到 `utils/regionSelect.ts`（hitTestRegions + createRegionCycle），新增 8 项单测
 
+### 双终端工作流（Pro 架构师/Flash 工程师，CCswitch 转接 DeepSeek）
+- 新增 `tools/start_architect.sh`（终端 A · DeepSeek V4 Pro · 架构师+测试员）、`tools/start_engineer.sh`（终端 B · DeepSeek V4 Flash · 工程师），用 `claude --model` 选模型 + 角色提示词作为首条消息
+- 角色提示词加入双终端交接协议：启动先读 status.json 判断该不该自己干（planning/testing→A，coding→B），不是自己的阶段就提示去对面终端，不越权
+- 交接循环：你写 task.md → A 写方案 → B 写代码 → A 测试验收 → 你确认提交；两终端共享 `.agent-workflow/` 状态文件
+- DEVELOPMENT.md 4.2 记录双终端模式（主推）；orchestrator_auto.sh 降级为单进程自动替代方案
+
 ### 收尾：PRIVACY.md 隐私声明 + 答辩 PPT 大纲更新
 - 新增 `PRIVACY.md`：三种处理路径数据流向（本地不出设备/精准增强内存即弃/文本纯本地）、不落盘不训练不追踪、传输安全、数据生命周期、用户控制权、合规免责
 - `docs/ppt-outline.md` 融入新功能：手动画框人工修正、上下文增强识别、PDF 报告导出、不可逆保护档位、信任文案数据流向透明，更新演示流程（含文本页上下文增强演示）

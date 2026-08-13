@@ -88,22 +88,43 @@ yindun/
 ### 4.1 角色分工
 | 角色 | 谁 | 职责 | 不做 |
 |---|---|---|---|
-| **架构师 = 测试端** | **主会话 Claude（本仓库）** | 写方案 / 补测试 / 跑回归 / 版本指派 / PATCH 本地 commit | 不写业务代码 |
-| **工程师 = 开发端** | **子 agent / headless `claude -p`** | 按方案写代码、按测试报告修 bug | 不写测试 / 不跑测试 / 不提交 / 不 bump 版本 |
-| **推送端** | **主会话 Claude（架构师/测试端）** | GitHub push、MINOR/MAJOR 打包（先问用户） | 版本号由用户+测试端指派 |
+| **架构师 = 测试端** | **终端 A（DeepSeek V4 Pro）** | 写方案 / 补测试 / 跑回归 / 版本指派 / PATCH 本地 commit | 不写业务代码 |
+| **工程师 = 开发端** | **终端 B（DeepSeek V4 Flash）** | 按方案写代码、按测试报告修 bug | 不写测试 / 不跑测试 / 不提交 / 不 bump 版本 |
+| **推送端** | **终端 A（架构师/测试端）** | GitHub push、MINOR/MAJOR 打包（先问用户） | 版本号由用户+测试端指派 |
 
-### 4.2 状态机（.agent-workflow/status.json 的 phase）
+### 4.2 双终端模式（主推）— 真·两个终端分工
+用 CCswitch 把两个 Claude Code 终端分别转接到 DeepSeek V4 Pro / Flash：
+- **终端 A**（Pro）= 架构师+测试员，`tools/start_architect.sh` 启动
+- **终端 B**（Flash）= 工程师，`tools/start_engineer.sh` 启动
+
+模型路由（CCswitch 已配好，终端启动脚本自动覆盖 `--model`）：
+- `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`
+- `ANTHROPIC_MODEL=deepseek-v4-pro`（终端 A）/ `deepseek-v4-flash[1m]`（终端 B）
+- 可临时改模型：`ARCHITECT_MODEL=deepseek-v4-pro[1m] ./tools/start_architect.sh`
+
+**交接循环（用户只负责在两头切终端）：**
+```
+你写 task.md → [终端A] 读status: planning → 写plan.md → phase=coding → 提示去B
+            → [终端B] 读status: coding → 按plan写代码 → phase=testing → 提示去A
+            → [终端A] 读status: testing → 跑回归写test_report → phase=done/failed 或 回coding
+            → 你确认提交/push
+```
+- 每个终端启动先读 `status.json` 判断该不该自己干；不是自己的阶段就明确提示去对面终端，不越权
+- 两个终端共享 `.agent-workflow/` 状态文件做交接，无需互相直接通信
+
+### 4.3 状态机（.agent-workflow/status.json 的 phase）
 ```
 planning → coding → testing → done
                 ↘ failed（超过最大迭代）
 ```
-- 人只做两件事：**开头写 task.md**、**结尾确认提交/push**
-- 全自动：`./orchestrator_auto.sh`（v2：claude -p 串行调度 + 异常恢复[status 损坏防护/断点续跑/卡住警告] + 可观测性[history.log/失败快照] + 成本控制[`--max-budget-usd`] + 热循环守卫 MAX_STALL=3）
+- 人只做两件事：**开头写 task.md**、**结尾确认提交/push** + 在两头切终端
+- 双终端手动：`./tools/start_architect.sh` + `./tools/start_engineer.sh`（主推，见 4.2）
+- 单进程自动（替代方案）：`./orchestrator_auto.sh`（v2：claude -p 串行调度 + 异常恢复[status 损坏防护/断点续跑/卡住警告] + 可观测性[history.log/失败快照] + 成本控制[`--max-budget-usd`] + 热循环守卫 MAX_STALL=3）
 - 半自动：`./orchestrator.sh`（按提示切终端）
 
-### 4.3 提示词
-- `architect_prompt.md`：规划写方案 / 测试跑回归；只写 `.agent-workflow/` + `tests/`
-- `engineer_prompt.md`：只改 `backend/app/**` + `frontend/src/**`
+### 4.4 提示词
+- `architect_prompt.md`：规划写方案 / 测试跑回归；只写 `.agent-workflow/` + `tests/`；含双终端交接协议（终端 A）
+- `engineer_prompt.md`：只改 `backend/app/**` + `frontend/src/**`；含双终端交接协议（终端 B）
 - 两个 prompt 均含**时间戳规则**：`last_updated` 必须用 `date '+%Y-%m-%d %H:%M'` 取
 
 ---
