@@ -178,7 +178,17 @@ window.matchMedia('print').addEventListener('change', (e) => {
   if (result.value?.report) nextTick(() => drawRadar(e.matches))
 })
 
-function exportPDF() { window.print() }
+function exportPDF() {
+  if (!result.value?.report) return
+  // Chrome/Edge 的 window.print() 同步阻塞，matchMedia('print') change 事件在阻塞期间不派发，
+  // 所以打印前显式切浅色调色板；打印结束（对话框关闭）后按是否仍在打印模式决定是否恢复深色。
+  // Safari 等非阻塞浏览器由下方 matchMedia 监听兜底处理退出打印。
+  drawRadar(true)
+  setTimeout(() => {
+    window.print()
+    if (!window.matchMedia('print').matches && result.value?.report) drawRadar(false)
+  }, 60)
+}
 </script>
 
 <template>
@@ -345,10 +355,12 @@ function exportPDF() { window.print() }
   .page { max-width: none; padding: 0; }
   .result-panel { animation: none !important; opacity: 1 !important; transform: none !important; }
   .score-card, .radar-panel, .detail-card, .adv-panel, .adv-verdict, .adv-region, .reinforce-guide {
-    background: #fff !important; border-color: #dde0ea !important; color: #222 !important; box-shadow: none !important;
+    background: #fff !important; color: #222 !important; box-shadow: none !important;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  .score-msg, .detail-suggestion, .adv-msg, .adv-note, .metric, .guide-item, .score-label, .adv-label { color: #333 !important; }
+  /* 评分卡边框保留 inline 风险色（绿/黄/红），其余卡片统一浅灰边框 */
+  .radar-panel, .detail-card, .adv-panel, .adv-verdict, .adv-region, .reinforce-guide { border-color: #dde0ea !important; }
+  .score-msg, .suggestion, .detail-suggestion, .adv-msg, .adv-note, .metric, .guide-item, .score-label, .adv-label, .report-meta, .report-img span { color: #333 !important; }
   .details-title, .guide-title, .detail-index, .report-title { color: #1a1a2e !important; }
   .adv-table th, .adv-table td { color: #333 !important; border-bottom-color: #e0e0ea !important; }
   .score-num, .score-level, .detail-risk, .adv-region-verdict, .adv-label {
