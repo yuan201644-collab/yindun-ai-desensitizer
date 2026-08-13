@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/desensitize", tags=["Desensitize"])
 
 class ImageDesensitizeRequest(BaseModel):
     """图片脱敏请求"""
-    image_base64: str = Field(..., description="Base64 编码的图片")
+    image_base64: str = Field(..., description="Base64 编码的图片", max_length=30_000_000)
     regions: list[dict] = Field(..., description="脱敏区域列表")
     default_method: str = Field(
         default="pixelate",

@@ -18,8 +18,8 @@ router = APIRouter(prefix="/api", tags=["Anti-Restore"])
 
 class StrengthCheckRequest(BaseModel):
     """脱敏强度检测请求"""
-    original_image_base64: str = Field(..., description="原始图片 Base64")
-    processed_image_base64: str = Field(..., description="脱敏后图片 Base64")
+    original_image_base64: str = Field(..., description="原始图片 Base64", max_length=30_000_000)
+    processed_image_base64: str = Field(..., description="脱敏后图片 Base64", max_length=30_000_000)
     regions: list[dict] = Field(
         default_factory=list,
         description="脱敏区域列表 [{rect: {x, y, w, h}}]"

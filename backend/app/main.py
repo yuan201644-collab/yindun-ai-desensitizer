@@ -114,7 +114,7 @@ async def global_exception_handler(request, exc):
     traceback.print_exc()
     return JSONResponse(
         status_code=500,
-        content={"success": False, "error": str(exc), "type": type(exc).__name__},
+        content={"success": False, "error": "服务内部错误", "type": type(exc).__name__},
     )
 
 
