@@ -70,3 +70,31 @@ class DetectionService:
     def filter_sensitive(detections: list[dict]) -> list[dict]:
         sensitive_labels = set(DetectionConfig.SENSITIVE_CLASSES)
         return [d for d in detections if d["label"] in sensitive_labels]
+
+    @staticmethod
+    def filter_by_ocr(object_regions: list[dict], text_regions: list[dict], img_w: int, img_h: int) -> list[dict]:
+        """OCR 融合过滤：证件类对象框若几乎覆盖整图且内部大量文本行 → 误检丢弃。
+
+        场景：聊天/文档截图被 YOLO 误判为证件（实测 id_card conf=0.78、
+        框占图 90%、框内 14 行 OCR 文本）；真证件框面积占比小、内部文本
+        少且结构化（身份证 ~7 行、银行卡 3-4 行）。
+        """
+        out = []
+        for obj in object_regions:
+            r = obj.get("rect")
+            if not r or r["w"] <= 0 or r["h"] <= 0:
+                continue
+            area_ratio = (r["w"] * r["h"]) / max(1, img_w * img_h)
+            inside = sum(
+                1 for t in text_regions
+                if t.get("rect")
+                and t["rect"]["x"] >= r["x"] and t["rect"]["y"] >= r["y"]
+                and t["rect"]["x"] + t["rect"]["w"] <= r["x"] + r["w"]
+                and t["rect"]["y"] + t["rect"]["h"] <= r["y"] + r["h"]
+            )
+            # 误检特征：框占图 >80% 且内部 >=5 行文本（证件不会整图+满文字）
+            if area_ratio > 0.8 and inside >= 5:
+                print(f"[Detection] 过滤误检 {obj.get('label')} conf={obj.get('confidence')} 面积占比={area_ratio:.2f} 内部文本={inside}行")
+                continue
+            out.append(obj)
+        return out

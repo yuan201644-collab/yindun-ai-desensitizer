@@ -80,6 +80,8 @@ async def ocr_detect(
         try:
             detections = detection_service.detect(image)
             object_regions = DetectionService.filter_sensitive(detections)
+            # ⭐ OCR 融合过滤：聊天/文档截图被 YOLO 误检为证件（整图框+大量文本）→ 丢弃
+            object_regions = DetectionService.filter_by_ocr(object_regions, text_regions, w, h)
         except Exception as e:
             print(f"[OCR] 目标检测跳过 (YOLO 不可用): {e}")
 
