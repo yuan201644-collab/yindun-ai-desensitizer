@@ -406,6 +406,11 @@ onUnmounted(() => { resetUpload() })
       <div class="scenario-entry">
         <p class="scenario-label">🎯 选个场景，直接上传开干</p>
         <div class="scenario-grid">
+          <div class="scenario-card" :class="{ active: activeTemplate === 'general' }" @click="pickScenario('general')">
+            <span class="scenario-icon">🌐</span>
+            <span class="scenario-name">通用脱敏</span>
+            <span class="scenario-desc">识别所有敏感信息，自己把关</span>
+          </div>
           <div class="scenario-card" :class="{ active: activeTemplate === 'chat' }" @click="pickScenario('chat')">
             <span class="scenario-icon">🗨️</span>
             <span class="scenario-name">聊天截图脱敏</span>
@@ -415,6 +420,11 @@ onUnmounted(() => { resetUpload() })
             <span class="scenario-icon">🪪</span>
             <span class="scenario-name">证件材料脱敏</span>
             <span class="scenario-desc">身份证/成绩单/简历，保留有效信息</span>
+          </div>
+          <div class="scenario-card" :class="{ active: activeTemplate === 'express' }" @click="pickScenario('express')">
+            <span class="scenario-icon">📦</span>
+            <span class="scenario-name">快递单脱敏</span>
+            <span class="scenario-desc">晒单不泄露客户隐私，只打码关键信息</span>
           </div>
           <div class="scenario-card" @click="pickScenario('llm')">
             <span class="scenario-icon">🤖</span>
@@ -610,7 +620,7 @@ onUnmounted(() => { resetUpload() })
 /* 场景入口卡片 */
 .scenario-entry { margin-bottom: 16px; }
 .scenario-label { font-weight: 600; font-size: 14px; margin-bottom: 10px; color: #c0c0e0; }
-.scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.scenario-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .scenario-card { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 12px; padding: 14px 10px; cursor: pointer; text-align: center; transition: all 0.15s; }
 .scenario-card:hover { border-color: #6c63ff; background: rgba(108,99,255,0.05); }
 .scenario-card.active { border-color: #6c63ff; background: rgba(108,99,255,0.18); box-shadow: inset 0 0 0 1px #6c63ff; }
