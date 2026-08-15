@@ -21,6 +21,22 @@ CATEGORY_PRIORITY = {
 }
 
 
+def shrink_rect_to_match(rect: dict, text: str, start: int, end: int) -> dict:
+    """按字符等宽比例把整行 rect 收缩为 [start,end) 子串的像素框。
+
+    用于「标签+值」同行场景（如「公民身份号码3213…」）：只保留敏感值的
+    像素范围，字段标签不打码。整行即值（start==0 且 end==len）或输入
+    无效时原样返回，避免误缩。
+    """
+    total = len(text or "")
+    if total <= 0 or end <= start or start < 0 or end > total or not (start > 0 or end < total):
+        return rect
+    x, y, w, h = rect["x"], rect["y"], rect["w"], rect["h"]
+    x0 = x + int(round(w * start / total))
+    x1 = x + int(round(w * end / total))
+    return {"x": x0, "y": y, "w": max(1, x1 - x0), "h": h}
+
+
 class OCRService:
     _instance: Optional["OCRService"] = None
     _ocr = None
@@ -80,6 +96,12 @@ class OCRService:
             }
             if mode == "full":
                 region["sensitive"] = self._classify_sensitive(text)
+                s = region["sensitive"]
+                # ⭐ 标签+值同行时，把 rect 收缩到敏感子串范围（字段标签不打码）
+                if s and s.get("match_start") is not None:
+                    region["rect"] = shrink_rect_to_match(
+                        region["rect"], text, s["match_start"], s["match_end"]
+                    )
             regions.append(region)
 
         # 检测框后处理：空白误检丢弃 + 按文字实际边界收紧
@@ -129,12 +151,23 @@ class OCRService:
             return None
         hits.sort(key=lambda h: h[0])
         _, type_name, config, match = hits[0]
+        # ⭐ 支持条目 group：敏感值取指定捕获组（不含「姓名」等字段标签）
+        group_idx = config.get("group")
+        if group_idx:
+            start, end = match.start(group_idx), match.end(group_idx)
+            matched = match.group(group_idx)
+        else:
+            start, end = match.start(), match.end()
+            matched = match.group()
         return {
             "type": type_name,
             "category": config["category"],
             "risk_level": config["risk_level"],
-            "matched_text": match.group(),
+            "matched_text": matched,
             "object_label": SENSITIVE_OBJECT_LABELS.get(config["category"], type_name),
+            # 敏感子串在整行文本中的字符区间（图片侧据此只打码内容）
+            "match_start": start,
+            "match_end": end,
         }
 
     def filter_sensitive_only(self, regions: list[dict]) -> list[dict]:

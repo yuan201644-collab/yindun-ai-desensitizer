@@ -90,18 +90,23 @@ class DesensitizeService:
 
         for type_name, config in SENSITIVE_PATTERNS.items():
             for match in re.finditer(config["pattern"], text):
+                # ⭐ 支持条目 group：掩码区间取指定捕获组（如「姓名：袁润熙」只掩码「袁润熙」，标签保留）
+                group_idx = config.get("group")
+                ms = match.start(group_idx) if group_idx else match.start()
+                me = match.end(group_idx) if group_idx else match.end()
+                matched = match.group(group_idx) if group_idx else match.group()
                 # 避免重叠
-                if any(s["start"] <= match.start() < s["end"] or
-                       s["start"] < match.end() <= s["end"]
+                if any(s["start"] <= ms < s["end"] or
+                       s["start"] < me <= s["end"]
                        for s in spans):
                     continue
                 spans.append({
-                    "start": match.start(),
-                    "end": match.end(),
+                    "start": ms,
+                    "end": me,
                     "type": type_name,
                     "category": config["category"],
                     "risk_level": config["risk_level"],
-                    "matched_text": match.group(),
+                    "matched_text": matched,
                 })
 
         # 按位置排序
