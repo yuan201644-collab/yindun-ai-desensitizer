@@ -16,6 +16,15 @@ import numpy as np
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from app.services.ocr_service import OCRService
 from app.services.detection_service import DetectionService
+
+
+def clamp_rect(rect: dict, img_w: int, img_h: int) -> dict:
+    """把 rect 收敛到图片边界内（防 OCR 下采样还原/子串收缩取整导致的 1-2px 超界）"""
+    x = max(0, min(rect["x"], img_w - 1))
+    y = max(0, min(rect["y"], img_h - 1))
+    w = max(1, min(rect["w"], img_w - x))
+    h = max(1, min(rect["h"], img_h - y))
+    return {"x": x, "y": y, "w": w, "h": h}
 from app.core.config import SecurityConfig, OCRConfig
 
 router = APIRouter(prefix="/api", tags=["OCR"])
@@ -101,6 +110,11 @@ async def ocr_detect(
                 for pt in bbox:
                     pt[0] = int(round(pt[0] * scale))
                     pt[1] = int(round(pt[1] * scale))
+
+    # 6.1 统一收敛到图片边界（防还原/收缩取整超界，前端 overlay 永不越界）
+    for region in text_regions + object_regions:
+        if region.get("rect"):
+            region["rect"] = clamp_rect(region["rect"], orig_w, orig_h)
 
     # 7. 组装响应
     return {

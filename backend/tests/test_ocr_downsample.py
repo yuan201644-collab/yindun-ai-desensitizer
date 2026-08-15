@@ -27,3 +27,36 @@ def test_small_image_scale_is_one():
     orig_w, orig_h = 1143, 901
     scale = max(orig_h, orig_w) / OCRConfig.OCR_MAX_SIDE if max(orig_h, orig_w) > OCRConfig.OCR_MAX_SIDE else 1.0
     assert scale == 1.0
+
+
+# ---------- clamp_rect：rect 收敛到图片边界（防超界） ----------
+
+def test_clamp_rect_valid_unchanged():
+    from app.api.routes.ocr import clamp_rect
+    rect = {"x": 10, "y": 20, "w": 100, "h": 50}
+    assert clamp_rect(rect, 800, 600) == rect
+
+
+def test_clamp_rect_beyond_right_bottom():
+    """超出右下界的 rect 收敛到边界（x+w ≤ 宽、y+h ≤ 高），起点合法则保留、裁剪尾部尺寸"""
+    from app.api.routes.ocr import clamp_rect
+    out = clamp_rect({"x": 780, "y": 590, "w": 100, "h": 80}, 800, 600)
+    assert out == {"x": 780, "y": 590, "w": 20, "h": 10}  # 起点合法保留，w/h 裁到边界内
+    assert out["x"] + out["w"] <= 800
+    assert out["y"] + out["h"] <= 600
+
+
+def test_clamp_rect_negative_origin():
+    """负坐标收敛到 0（w/h 相应裁剪）"""
+    from app.api.routes.ocr import clamp_rect
+    out = clamp_rect({"x": -5, "y": -3, "w": 100, "h": 50}, 800, 600)
+    assert out["x"] == 0 and out["y"] == 0
+    assert out["w"] == 100 and out["h"] == 50  # 起点归零，尺寸不变
+
+
+def test_clamp_rect_large_overflow():
+    """rect 整体超出图片（起点合法但尺寸过大）→ 收敛不超界"""
+    from app.api.routes.ocr import clamp_rect
+    out = clamp_rect({"x": 500, "y": 400, "w": 5000, "h": 5000}, 800, 600)
+    assert out["x"] + out["w"] <= 800
+    assert out["y"] + out["h"] <= 600

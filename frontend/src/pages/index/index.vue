@@ -444,8 +444,10 @@ onUnmounted(() => { resetUpload() })
     <div class="workspace" v-if="uploadState.status === 'ready'">
       <div class="image-panel fade-in" @mousedown="onPanelDown" @mousemove="onPanelMove" @mouseup="onPanelUp">
         <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
-        <img v-show="!isProcessed" :src="uploadState.previewUrl" class="preview-image" />
-        <div v-if="!isProcessed && (textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
+        <!-- ⭐ overlay 定位容器：wrap 包裹 img，overlay 相对图片渲染区域（修复识别框错位/超界） -->
+        <div v-show="!isProcessed" class="preview-wrap">
+          <img :src="uploadState.previewUrl" class="preview-image" />
+          <div v-if="(textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
           <div v-for="(region, i) in textRegions" :key="'t'+i" class="region-box"
             :class="{
               'risk-high': region.sensitive?.risk_level === 'high',
@@ -481,6 +483,7 @@ onUnmounted(() => { resetUpload() })
             width: drawBox.w / uploadState.width * 100 + '%',
             height: drawBox.h / uploadState.height * 100 + '%',
           }"></div>
+          </div>
         </div>
         <div v-if="ocrLoading" class="loading-overlay fade-in">
           <div class="scan-frame"><div class="scan-line"></div></div>
@@ -618,7 +621,10 @@ onUnmounted(() => { resetUpload() })
 .workspace { display: flex; gap: 16px; margin-top: 16px; }
 .image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: hidden; min-height: 300px; }
 .preview-canvas, .preview-image { width: 100%; display: block; }
-.overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+/* ⭐ overlay 定位容器：wrap 尺寸 = 图片渲染尺寸（img width:100% 撑宽、高度随比例），
+   overlay 相对 wrap 定位 → 识别框与文字精确对齐（修复"框错位/超出图片界限"老问题） */
+.preview-wrap { position: relative; width: 100%; display: block; }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
 .region-box { position: absolute; border: 2px solid #ffcc00; background: rgba(255,204,0,0.08); border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
 .region-box.risk-high { border-color: #ff4444; background: rgba(255,68,68,0.12); }
 .region-box.risk-medium { border-color: #ffaa00; background: rgba(255,170,0,0.10); }
