@@ -17,6 +17,8 @@ export interface ScenarioTemplate {
   desc: string
   /** ⭐ 打码范围人话提示（分流卡片展示，让用户知道本场景会处理哪些类型） */
   scopeLabel?: string
+  /** ⭐ 打码效果示例（分流卡片展示，直观预览） */
+  example?: string
   /** 文本流：只启用这些敏感类型检测（空 = 全部） */
   activeTypes?: string[]
   /** 图片流：自动选中这些敏感类型（空 = 按风险等级全选） */
@@ -33,6 +35,7 @@ export const SCENARIO_TEMPLATES: ScenarioTemplate[] = [
     icon: '🌐',
     desc: '识别所有敏感信息',
     scopeLabel: '所有敏感类型',
+    example: '138****5678 · 张三 → ███',
     defaultMethod: 'pixelate',
     defaultIntensity: 0.8,
   },
@@ -42,6 +45,7 @@ export const SCENARIO_TEMPLATES: ScenarioTemplate[] = [
     icon: '📦',
     desc: '只打码手机号/固话/地址/单号，晒单不泄露客户隐私',
     scopeLabel: '手机号 · 固话 · 地址 · 快递单号',
+    example: 'SF123****890 · 138****8000',
     activeTypes: ['手机号', '固定电话', '家庭住址', '快递单号'],
     preferTypes: ['手机号', '固定电话', '家庭住址', '快递单号'],
     defaultMethod: 'irreversible',
@@ -53,6 +57,7 @@ export const SCENARIO_TEMPLATES: ScenarioTemplate[] = [
     icon: '🗨️',
     desc: '只打码手机号/邮箱/地址，截图分享更安全',
     scopeLabel: '手机号 · 邮箱 · 地址',
+    example: '手机 138****8000',
     activeTypes: ['手机号', '电子邮箱', '家庭住址'],
     preferTypes: ['手机号', '电子邮箱', '家庭住址'],
     defaultMethod: 'gaussian',
@@ -64,6 +69,7 @@ export const SCENARIO_TEMPLATES: ScenarioTemplate[] = [
     icon: '🪪',
     desc: '身份证/护照/银行卡等强信息，全局高强脱敏',
     scopeLabel: '证件号 · 银行卡 · 姓名 · 出生日期 · 地址',
+    example: '110***********123X',
     activeTypes: ['身份证号', '护照号', '银行卡号', '家庭住址', '姓名', '出生日期'],
     preferTypes: ['身份证号', '护照号', '银行卡号', '家庭住址', '姓名', '出生日期'],
     defaultMethod: 'irreversible',

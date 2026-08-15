@@ -31,6 +31,13 @@ describe('场景模板库', () => {
     }
   })
 
+  it('所有模板都有打码效果示例 example（分流卡片展示）', () => {
+    for (const t of SCENARIO_TEMPLATES) {
+      expect(t.example, `${t.id} 缺 example`).toBeTruthy()
+      expect(t.example!.length).toBeGreaterThan(3)
+    }
+  })
+
   it('getTemplate 找不到时回退到通用', () => {
     expect(getTemplate('not-exist').id).toBe('general')
   })
