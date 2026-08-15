@@ -41,8 +41,8 @@ export function applyDesensitize(
       pixelateRegion(imageData, w, h, Math.max(Math.min(w, h), Math.floor(12 * intensity)))
       break
     case 'gaussian':
-      // sigma 自适应区域尺寸：小区域 → 强模糊；同时保留 intensity 缩放
-      gaussianRegion(imageData, w, h, Math.max(Math.min(w, h) * 0.4, 5 + 20 * intensity))
+      // ⭐ 高斯噪点混淆：强度驱动模糊半径 + 噪声（对齐后端"强模糊+噪点"语义）
+      gaussianRegion(imageData, w, h, intensity)
       break
     case 'irreversible':
       // patch 自适应区域尺寸：小区域 → 整个区域一个 patch；同时保留 intensity 缩放
@@ -51,6 +51,81 @@ export function applyDesensitize(
   }
 
   ctx.putImageData(imageData, x, y)
+}
+
+/**
+ * ⭐ 高斯噪点混淆核心（可单测纯函数）：两次一维 box blur（打散文字结构）+ 高斯噪点注入。
+ * 输入兼容 ImageData 结构 { data, width, height }（node 测试环境可手造，不依赖 canvas API）。
+ * @param pixels 像素缓冲（原地修改）
+ * @param radius 模糊半径（>=2），模糊把文字笔画弥散开，人眼/AI 无法再读
+ * @param noiseLevel 噪点强度 0-255，对抗去噪模型
+ */
+export function applyGaussianMask(
+  pixels: { data: Uint8ClampedArray; width: number; height: number },
+  radius: number,
+  noiseLevel: number
+): void {
+  const { data, width, height } = pixels
+  const r = Math.max(2, Math.min(radius, Math.floor(Math.min(width, height) / 2)))
+  const len = width * height * 4
+
+  // ① 两次一维 box blur（水平 → 垂直），O(n*2r)，边界复制
+  const tmp = new Float32Array(len)
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4
+    for (let x = 0; x < width; x++) {
+      let x0 = x - r, x1 = x + r
+      if (x0 < 0) x0 = 0
+      if (x1 >= width) x1 = width - 1
+      const n = x1 - x0 + 1
+      const idx = row + x * 4
+      let sr = 0, sg = 0, sb = 0
+      for (let k = x0; k <= x1; k++) {
+        const ki = row + k * 4
+        sr += data[ki]; sg += data[ki + 1]; sb += data[ki + 2]
+      }
+      tmp[idx] = sr / n; tmp[idx + 1] = sg / n; tmp[idx + 2] = sb / n; tmp[idx + 3] = data[idx + 3]
+    }
+  }
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+      let y0 = y - r, y1 = y + r
+      if (y0 < 0) y0 = 0
+      if (y1 >= height) y1 = height - 1
+      const n = y1 - y0 + 1
+      const idx = (y * width + x) * 4
+      let sr = 0, sg = 0, sb = 0
+      for (let k = y0; k <= y1; k++) {
+        const ki = (k * width + x) * 4
+        sr += tmp[ki]; sg += tmp[ki + 1]; sb += tmp[ki + 2]
+      }
+      data[idx] = sr / n; data[idx + 1] = sg / n; data[idx + 2] = sb / n
+    }
+  }
+
+  // ② 逐像素高斯噪点（Box-Muller），破坏去噪模型可恢复性
+  for (let i = 0; i < len; i += 4) {
+    const g1 = Math.random()
+    const g2 = Math.random()
+    const gauss = Math.sqrt(-2 * Math.log(Math.max(g1, 0.001))) * Math.cos(2 * Math.PI * g2)
+    const v = data[i] + gauss * noiseLevel
+    data[i] = v < 0 ? 0 : v > 255 ? 255 : v
+  }
+}
+
+/**
+ * 高斯噪点混淆：模糊（打散结构）+ 噪点（对抗去噪）。
+ * 强度 intensity(0-1) 同时驱动模糊半径与噪声大小。
+ */
+function gaussianRegion(
+  imageData: ImageData,
+  width: number,
+  height: number,
+  intensity: number
+): void {
+  const radius = Math.max(2, Math.round(Math.min(width, height) * 0.25 * intensity))
+  const noise = Math.min(255, 20 + 40 * intensity)  // 对齐后端噪点量级（~12%），避免雪花感
+  applyGaussianMask(imageData, radius, noise)
 }
 
 /**
@@ -97,33 +172,6 @@ function pixelateRegion(
           data[idx + 2] = avgB
         }
       }
-    }
-  }
-}
-
-/**
- * 高斯噪点混淆：逐像素加噪 + 邻域混合
- */
-function gaussianRegion(
-  imageData: ImageData,
-  width: number,
-  height: number,
-  noiseLevel: number
-): void {
-  const data = imageData.data
-  const noise = noiseLevel * 2.55 // 转 0-255 范围
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4
-      // Box-Muller 近似高斯噪点
-      const g1 = Math.random()
-      const g2 = Math.random()
-      const gauss = Math.sqrt(-2 * Math.log(Math.max(g1, 0.001))) * Math.cos(2 * Math.PI * g2)
-
-      data[idx] = Math.min(255, Math.max(0, data[idx] + gauss * noise))
-      data[idx + 1] = Math.min(255, Math.max(0, data[idx + 1] + gauss * noise))
-      data[idx + 2] = Math.min(255, Math.max(0, data[idx + 2] + gauss * noise))
     }
   }
 }

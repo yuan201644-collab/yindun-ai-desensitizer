@@ -1,4 +1,5 @@
 """脱敏算法冒烟测试 — 只依赖 cv2 + numpy，不 import app.main（避免触发模型预热）"""
+import cv2
 import numpy as np
 import pytest
 
@@ -85,3 +86,27 @@ def test_out_of_bounds_region_safe():
     img = np.zeros((50, 50, 3), dtype=np.uint8)
     out = d.apply(img, {"x": -10, "y": -10, "w": 100, "h": 100})
     assert out.shape == img.shape
+
+
+# ============================================================
+# 脱敏有效性：高斯必须破坏文字结构（拉普拉斯高频能量显著下降）
+# ============================================================
+
+def _high_freq_energy(img: np.ndarray) -> float:
+    """拉普拉斯高频能量 = 文字笔画边缘强度代理（模糊后应大幅下降）"""
+    gray = img.mean(axis=2).astype(np.float32)
+    lap = cv2.Laplacian(gray, cv2.CV_32F)
+    return float(np.abs(lap).mean())
+
+
+def test_gaussian_destroys_text_structure():
+    """有效性：高斯模糊应显著降低文字笔画高频能量（>50%）。
+    ⚠️ 此前测试只用随机图断言"像素变了"——随机图无结构，测不出文字未破坏。"""
+    pattern = (np.arange(100)[:, None] % 10 < 5).astype(np.uint8) * 255  # 10px 周期条纹 ≈ 文字笔画
+    img = np.stack([pattern] * 3, axis=2)
+    region = {"x": 0, "y": 0, "w": 100, "h": 100}
+
+    out = GaussianDesensitizer().apply(img.copy(), region)
+    before = _high_freq_energy(img)
+    after = _high_freq_energy(out)
+    assert after < before * 0.5, f"高斯应显著破坏结构: before={before:.1f} after={after:.1f}"
