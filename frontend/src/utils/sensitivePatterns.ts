@@ -17,10 +17,22 @@ export interface SensitivePattern {
   keepLast: number
   /** 掩码字符 */
   maskChar: string
+  /** ⭐ 敏感值取第 N 捕获组（如「姓名：袁润熙」只取「袁润熙」，标签不打码/不掩码） */
+  group?: number
 }
 
 /** ⚠️ 可修改扩展：在此数组添加新的敏感信息模式 */
 export const DEFAULT_PATTERNS: SensitivePattern[] = [
+  {
+    type: '姓名',
+    pattern: /(?:姓名|名字)[:：\s]*([\u4e00-\u9fa5·]{2,4})(?![0-9])/g,
+    category: 'identity',
+    riskLevel: 'high',
+    keepFirst: 0,
+    keepLast: 0,
+    maskChar: '█',
+    group: 1,
+  },
   {
     type: '身份证号',
     pattern: /[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]/g,
@@ -86,7 +98,8 @@ export const DEFAULT_PATTERNS: SensitivePattern[] = [
   },
   {
     type: '家庭住址',
-    pattern: /(?:省|市|区|县|镇|乡|村|路|街|巷|号|栋|单元|室|楼)\S{0,20}/g,
+    // 号(?!码)：排除「号码/单号」等词的「号」误命中（身份证行的「身份号码」不会被当作地址）
+    pattern: /(?:省|市|区|县|镇|乡|村|路|街|巷|号(?!码)|栋|单元|室|楼)\S{0,20}/g,
     category: 'location',
     riskLevel: 'high',
     keepFirst: 0,
@@ -142,7 +155,9 @@ export function applyMask(
   const midLen = text.length - keepFirst - keepLast
   if (midLen <= 0) return maskChar.repeat(text.length)
 
-  return text.slice(0, keepFirst) + maskChar.repeat(midLen) + text.slice(-keepLast)
+  // ⭐ keepLast=0 时 text.slice(-0) === slice(0)（整个字符串），会尾部残留原文——显式处理
+  const tail = keepLast > 0 ? text.slice(-keepLast) : ''
+  return text.slice(0, keepFirst) + maskChar.repeat(midLen) + tail
 }
 
 /** 敏感对象语义标签（对齐后端 SENSITIVE_OBJECT_LABELS） */
@@ -162,21 +177,41 @@ export interface SensitiveMatch {
   risk_level: 'high' | 'medium' | 'low'
   matched_text: string
   object_label: string
+  /** ⭐ 敏感子串在整行文本中的字符区间（图片侧据此只打码内容，标签保留） */
+  match_start: number
+  match_end: number
 }
 
-/** 对一段文本做敏感分类，返回第一个命中的类型（无命中返回 null） */
+/** ⭐ 带捕获组位置的 exec 结果（lib 版本不含 ES2022 indices 时的类型扩展） */
+export type RegExpExecWithIndices = RegExpExecArray & {
+  indices?: Array<[number, number] | undefined>
+}
+
+/** 对一段文本做敏感分类，返回第一个命中的类型（无命中返回 null）
+ *  ⭐ 用 RegExp `d` flag 取捕获组位置（group 模式时 match 起点指向值部分） */
 export function classifyText(text: string): SensitiveMatch | null {
   for (const p of DEFAULT_PATTERNS) {
-    // 去掉 g 标志，避免 RegExp.lastIndex 跨调用残留
-    const regex = new RegExp(p.pattern.source, p.pattern.flags.replace('g', ''))
-    const m = regex.exec(text)
+    // 去掉 g 标志，避免 RegExp.lastIndex 跨调用残留；加 d 标志以读取捕获组位置
+    const base = p.pattern.flags.replace('g', '')
+    const regex = new RegExp(p.pattern.source, base.includes('d') ? base : base + 'd')
+    const m = regex.exec(text) as RegExpExecWithIndices | null
     if (m) {
+      const gi = p.group ?? 0
+      const matched = m[gi] ?? m[0]
+      let start = m.index
+      let end = m.index + m[0].length
+      if (m.indices?.[gi]) {
+        start = m.indices[gi][0]
+        end = m.indices[gi][1]
+      }
       return {
         type: p.type,
         category: p.category,
         risk_level: p.riskLevel,
-        matched_text: m[0],
+        matched_text: matched,
         object_label: OBJECT_LABELS[p.category] || p.type,
+        match_start: start,
+        match_end: end,
       }
     }
   }

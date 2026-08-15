@@ -37,6 +37,22 @@ export function isMeaningfulText(text: string): boolean {
   return /[一-龥A-Za-z0-9、，。！？：；]/.test(text)
 }
 
+/** ⭐ 按字符等宽比例把整行 rect 收缩为 [start,end) 子串的像素框（对齐后端 shrink_rect_to_match）。
+ *  「标签+值」同行（如「姓名袁润熙」「公民身份号码3213…」）只保留敏感值范围，字段标签不打码。
+ *  整行即值或输入无效时原样返回。 */
+export function shrinkRectToMatch(
+  rect: { x: number; y: number; w: number; h: number },
+  text: string,
+  start: number,
+  end: number
+): { x: number; y: number; w: number; h: number } {
+  const total = text.length
+  if (total <= 0 || end <= start || start < 0 || end > total || !(start > 0 || end < total)) return rect
+  const x0 = rect.x + Math.round(rect.w * start / total)
+  const x1 = rect.x + Math.round(rect.w * end / total)
+  return { x: x0, y: rect.y, w: Math.max(1, x1 - x0), h: rect.h }
+}
+
 /** 纯函数：Tesseract line → OCRRegion（与后端区域结构一致，供单测）
  *  scale：预处理放大倍数，坐标除以 scale 映射回原始图片坐标 */
 export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegion[] {
@@ -45,17 +61,20 @@ export function linesToRegions(lines: TesseractLine[], scale = 1): LocalOCRRegio
     .map(l => {
       const { x0, y0, x1, y1 } = l.bbox ?? { x0: 0, y0: 0, x1: 0, y1: 0 }
       const text = (l.text || '').trim()
+      const rect = {
+        x: Math.round(x0 / scale),
+        y: Math.round(y0 / scale),
+        w: Math.max(1, Math.round((x1 - x0) / scale)),
+        h: Math.max(1, Math.round((y1 - y0) / scale)),
+      }
+      const sensitive = classifyText(text)
       return {
         bbox: [[x0 / scale, y0 / scale], [x1 / scale, y0 / scale], [x1 / scale, y1 / scale], [x0 / scale, y1 / scale]],
-        rect: {
-          x: Math.round(x0 / scale),
-          y: Math.round(y0 / scale),
-          w: Math.max(1, Math.round((x1 - x0) / scale)),
-          h: Math.max(1, Math.round((y1 - y0) / scale)),
-        },
+        // ⭐ 标签+值同行时只保留敏感值像素范围
+        rect: sensitive ? shrinkRectToMatch(rect, text, sensitive.match_start, sensitive.match_end) : rect,
         text,
         confidence: l.confidence ?? 0,
-        sensitive: classifyText(text),
+        sensitive,
       }
     })
 }
@@ -77,15 +96,18 @@ export function parseHocr(hocr: string, scale = 1): LocalOCRRegion[] {
     const confMatch = title.match(/x_wconf\s+(\d+)/)
     if (confMatch && +confMatch[1] < 5) continue  // 极低置信度
     const x0 = +bboxMatch[1], y0 = +bboxMatch[2], x1 = +bboxMatch[3], y1 = +bboxMatch[4]
+    const rect = {
+      x: Math.round(x0 / scale), y: Math.round(y0 / scale),
+      w: Math.max(1, Math.round((x1 - x0) / scale)), h: Math.max(1, Math.round((y1 - y0) / scale)),
+    }
+    const sensitive = classifyText(text)
     regions.push({
       bbox: [[x0 / scale, y0 / scale], [x1 / scale, y0 / scale], [x1 / scale, y1 / scale], [x0 / scale, y1 / scale]],
-      rect: {
-        x: Math.round(x0 / scale), y: Math.round(y0 / scale),
-        w: Math.max(1, Math.round((x1 - x0) / scale)), h: Math.max(1, Math.round((y1 - y0) / scale)),
-      },
+      // ⭐ 标签+值同行时只保留敏感值像素范围
+      rect: sensitive ? shrinkRectToMatch(rect, text, sensitive.match_start, sensitive.match_end) : rect,
       text,
       confidence: confMatch ? +confMatch[1] : 0,
-      sensitive: classifyText(text),
+      sensitive,
     })
   }
   return regions
@@ -98,17 +120,20 @@ export function wordsToRegions(words: TesseractWord[], scale = 1): LocalOCRRegio
     .map(w => {
       const { x0, y0, x1, y1 } = w.bbox ?? { x0: 0, y0: 0, x1: 0, y1: 0 }
       const text = (w.text || '').trim()
+      const rect = {
+        x: Math.round(x0 / scale),
+        y: Math.round(y0 / scale),
+        w: Math.max(1, Math.round((x1 - x0) / scale)),
+        h: Math.max(1, Math.round((y1 - y0) / scale)),
+      }
+      const sensitive = classifyText(text)
       return {
         bbox: [[x0 / scale, y0 / scale], [x1 / scale, y0 / scale], [x1 / scale, y1 / scale], [x0 / scale, y1 / scale]],
-        rect: {
-          x: Math.round(x0 / scale),
-          y: Math.round(y0 / scale),
-          w: Math.max(1, Math.round((x1 - x0) / scale)),
-          h: Math.max(1, Math.round((y1 - y0) / scale)),
-        },
+        // ⭐ 标签+值同行时只保留敏感值像素范围
+        rect: sensitive ? shrinkRectToMatch(rect, text, sensitive.match_start, sensitive.match_end) : rect,
         text,
         confidence: w.confidence ?? 0,
-        sensitive: classifyText(text),
+        sensitive,
       }
     })
 }
@@ -143,12 +168,15 @@ export function groupRegionsToLines(regions: LocalOCRRegion[]): LocalOCRRegion[]
       const sx0 = Math.min(...seg.map(i => i.x0))
       const sx1 = Math.max(...seg.map(i => i.x1))
       const text = seg.map((i, idx) => (idx > 0 && i.x0 - seg[idx - 1].x1 > gapThreshold ? ' ' : '') + i.r.text).join('')
+      const rect = { x: sx0, y: line.y0, w: Math.max(1, sx1 - sx0), h: Math.max(1, line.y1 - line.y0) }
+      const sensitive = classifyText(text)
       out.push({
         bbox: [[sx0, line.y0], [sx1, line.y0], [sx1, line.y1], [sx0, line.y1]],
-        rect: { x: sx0, y: line.y0, w: Math.max(1, sx1 - sx0), h: Math.max(1, line.y1 - line.y0) },
+        // ⭐ 标签+值同行时只保留敏感值像素范围
+        rect: sensitive ? shrinkRectToMatch(rect, text, sensitive.match_start, sensitive.match_end) : rect,
         text,
         confidence: seg[0].r.confidence,
-        sensitive: classifyText(text),
+        sensitive,
       })
       seg = []
     }

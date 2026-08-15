@@ -27,7 +27,8 @@ describe('linesToRegions Tesseract line 转区域', () => {
       { bbox: { x0: 10, y0: 20, x1: 200, y1: 40 }, text: 'ID 11010119900101123X', confidence: 0.9 },
     ])
     expect(regions.length).toBe(1)
-    expect(regions[0].rect).toEqual({ x: 10, y: 20, w: 190, h: 20 })
+    // ⭐ 新行为：「ID」标签不打码，rect 收缩到号码子串（21 字符中号码从第 3 字符起）
+    expect(regions[0].rect).toEqual({ x: 37, y: 20, w: 163, h: 20 })
     expect(regions[0].bbox.length).toBe(4)
     expect(regions[0].confidence).toBe(0.9)
     expect(regions[0].sensitive?.type).toBe('身份证号')

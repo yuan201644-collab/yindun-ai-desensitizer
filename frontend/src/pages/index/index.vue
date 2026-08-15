@@ -118,9 +118,10 @@ function applyTemplateAutoSelect() {
       addRegion({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
     }
   })
-  objectRegions.value.forEach((r: any) => {
-    addRegion({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })
-  })
+  // ⭐ YOLO 对象区域是"提示框"（如身份证/人像整框），不再自动打码——
+  // 大框会整块覆盖标签+内容（用户反馈"全部打码"的根因）。
+  // 保留：对象框显示、分组列表、手动点选打码；自动打码聚焦 OCR 识别的敏感文字。
+  // objectRegions.value.forEach((r: any) => { addRegion({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }) })
 }
 
 function onTemplateChange() {

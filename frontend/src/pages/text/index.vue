@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { DEFAULT_PATTERNS, applyMask, matchCustomWords } from '../../utils/sensitivePatterns'
+import { DEFAULT_PATTERNS, applyMask, matchCustomWords, type RegExpExecWithIndices } from '../../utils/sensitivePatterns'
 import { SCENARIO_TEMPLATES, getTemplate, filterPatternsByTemplate } from '../../utils/scenarioTemplates'
 import { enhanceContext } from '../../utils/contextEnhance'
 
@@ -30,12 +30,22 @@ function detectLocally() {
   if (!text.trim()) return
   const patterns = filterPatternsByTemplate(DEFAULT_PATTERNS, activeTemplateObj.value)
   for (const pattern of patterns) {
-    const regex = new RegExp(pattern.pattern.source, pattern.pattern.flags)
-    let match: RegExpExecArray | null
-    while ((match = regex.exec(text)) !== null) {
-      const isOverlapping = spans.value.some(s => match!.index < s.end && match!.index + match![0].length > s.start)
+    // 加 d 标志以读取捕获组位置（group 模式时 span 指向值部分，标签保留）
+    const flags = pattern.pattern.flags.includes('d') ? pattern.pattern.flags : pattern.pattern.flags + 'd'
+    const regex = new RegExp(pattern.pattern.source, flags)
+    let match: RegExpExecWithIndices | null
+    while ((match = regex.exec(text) as RegExpExecWithIndices | null) !== null) {
+      const gi = pattern.group ?? 0
+      const matched = match[gi] ?? match[0]
+      let start = match.index
+      let end = match.index + match[0].length
+      if (match.indices?.[gi]) {
+        start = match.indices[gi][0]
+        end = match.indices[gi][1]
+      }
+      const isOverlapping = spans.value.some(s => start < s.end && end > s.start)
       if (!isOverlapping) {
-        spans.value.push({ start: match.index, end: match.index + match[0].length, type: pattern.type, category: pattern.category, riskLevel: pattern.riskLevel, matchText: match[0], maskChar: pattern.maskChar })
+        spans.value.push({ start, end, type: pattern.type, category: pattern.category, riskLevel: pattern.riskLevel, matchText: matched, maskChar: pattern.maskChar })
       }
     }
   }
