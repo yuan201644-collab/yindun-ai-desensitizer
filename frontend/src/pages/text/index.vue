@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { DEFAULT_PATTERNS, applyMask, matchCustomWords, type RegExpExecWithIndices } from '../../utils/sensitivePatterns'
 import { SCENARIO_TEMPLATES, getTemplate, filterPatternsByTemplate } from '../../utils/scenarioTemplates'
 import { enhanceContext } from '../../utils/contextEnhance'
+import { buildPlaceholderMask, restorePlaceholders } from '../../utils/placeholderMask'
 
 const inputText = ref('')
 // 自定义敏感词（换行/逗号分隔），不受场景模板 activeTypes 过滤影响，用户显式指定的词恒生效
@@ -23,6 +24,12 @@ watch(activeTemplate, () => {
 interface SpanResult { start: number; end: number; type: string; category: string; riskLevel: 'high' | 'medium' | 'low'; matchText: string; maskChar: string; contextConfirmed?: boolean }
 const spans = ref<SpanResult[]>([])
 const highRiskCount = computed(() => spans.value.filter(s => s.riskLevel === 'high').length)
+
+// ⭐ 占位符模式（AI 对话前置）：敏感值 → 【类型N】，事后可还原
+const placeholderMode = ref(false)
+const placeholderMapping = ref<Record<string, string>>({})
+const restoreInput = ref('')
+const restoredText = ref('')
 
 function detectLocally() {
   spans.value = []
@@ -64,6 +71,17 @@ function detectLocally() {
 }
 
 function applyLocalMask() {
+  refreshMaskedText()
+}
+
+/** ⭐ 按当前模式刷新脱敏结果（普通掩码 / 占位符） */
+function refreshMaskedText() {
+  if (placeholderMode.value) {
+    const { masked, mapping } = buildPlaceholderMask(inputText.value, spans.value)
+    maskedText.value = masked
+    placeholderMapping.value = mapping
+    return
+  }
   let result = inputText.value
   const sorted = [...spans.value].sort((a, b) => b.start - a.start)
   for (const span of sorted) {
@@ -75,7 +93,13 @@ function applyLocalMask() {
     result = result.slice(0, span.start) + masked + result.slice(span.end)
   }
   maskedText.value = result
+  placeholderMapping.value = {}
 }
+
+watch(placeholderMode, () => {
+  if (!isProcessed.value || !inputText.value.trim()) return
+  refreshMaskedText()
+})
 
 async function runDesensitize() {
   processing.value = true; error.value = ''
@@ -86,7 +110,27 @@ async function copyMaskedText() {
   try { await navigator.clipboard.writeText(maskedText.value); alert('已复制到剪贴板') } catch { /* ignore */ }
 }
 
-function reset() { maskedText.value = ''; spans.value = []; isProcessed.value = false; error.value = '' }
+/** ⭐ 复制占位符映射表（JSON） */
+async function copyPlaceholderMapping() {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(placeholderMapping.value))
+    alert('已复制映射表（保存好，还原时用）')
+  } catch { /* ignore */ }
+}
+
+/** ⭐ 还原：把 AI 回复中的占位符替换回原文 */
+function doRestore() {
+  restoredText.value = restorePlaceholders(restoreInput.value, placeholderMapping.value)
+}
+
+async function copyRestored() {
+  try { await navigator.clipboard.writeText(restoredText.value); alert('已复制还原文本') } catch { /* ignore */ }
+}
+
+function reset() {
+  maskedText.value = ''; spans.value = []; isProcessed.value = false; error.value = ''
+  placeholderMapping.value = {}; restoreInput.value = ''; restoredText.value = ''
+}
 
 const sampleTexts = [
   '张三，身份证号110101199001011234，手机13800138000，住北京市朝阳区某某路100号。',
@@ -156,6 +200,22 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
       </div>
       <div v-if="previewMode==='highlighted'" class="text-display" v-html="highlightedHTML"></div>
       <div v-if="previewMode==='masked'" class="text-display masked-text">{{ maskedText }}</div>
+      <label class="placeholder-toggle">
+        <input type="checkbox" v-model="placeholderMode">
+        🧠 占位符模式（AI 对话：敏感值换【类型N】，拿到 AI 回复后可一键还原）
+      </label>
+      <div v-if="placeholderMode" class="placeholder-panel">
+        <p class="pp-title">🔑 占位符映射表（<strong>复制保存</strong>，还原时用）：</p>
+        <pre class="pp-mapping">{{ JSON.stringify(placeholderMapping, null, 2) }}</pre>
+        <button class="btn btn-secondary" @click="copyPlaceholderMapping">📋 复制映射表</button>
+        <p class="pp-title" style="margin-top:12px">🔄 还原 AI 回复：</p>
+        <textarea v-model="restoreInput" class="text-input restore-input" placeholder="粘贴 AI 返回的文本（含【手机1】等占位符）" rows="3"></textarea>
+        <div class="action-row">
+          <button class="btn btn-primary" @click="doRestore" :disabled="!restoreInput.trim() || Object.keys(placeholderMapping).length === 0">🔄 还原占位符</button>
+          <button v-if="restoredText" class="btn btn-secondary" @click="copyRestored">📋 复制还原文本</button>
+        </div>
+        <div v-if="restoredText" class="text-display masked-text restore-result">{{ restoredText }}</div>
+      </div>
       <div class="action-row"><button class="btn btn-secondary" @click="reset">🔄 重新处理</button><button class="btn btn-primary" @click="copyMaskedText">📋 复制脱敏文本</button></div>
     </div>
     <div class="footer-note"><p>🔒 文本脱敏在浏览器本地完成，<strong>不会上传到服务器</strong></p></div>
@@ -175,6 +235,12 @@ function escapeHTML(str: string): string { return str.replace(/&/g,'&amp;').repl
 .template-desc { font-size: 11px; color: #6666aa; margin-top: 8px; }
 .text-input { width: 100%; background: #111122; border: 1px solid #2a2a4a; border-radius: 12px; padding: 16px; color: #e0e0f0; font-size: 14px; line-height: 1.8; min-height: 200px; resize: vertical; box-sizing: border-box; }
 .custom-words-box { margin-top: 12px; }
+.placeholder-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6c63ff; margin: 10px 0; cursor: pointer; user-select: none; }
+.placeholder-panel { background: #14142a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+.pp-title { font-size: 12px; color: #aaaacc; margin-bottom: 6px; }
+.pp-mapping { background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 8px; padding: 10px; font-size: 11px; color: #22c55e; overflow-x: auto; max-height: 160px; overflow-y: auto; }
+.restore-input { min-height: 60px; }
+.restore-result { margin-top: 10px; }
 .custom-words-label { font-size: 12px; color: #8888aa; margin-bottom: 6px; }
 .custom-words-input { min-height: 64px; }
 .samples { margin: 12px 0; } .samples-label { font-size: 12px; color: #6666aa; }
