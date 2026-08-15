@@ -36,8 +36,16 @@ class SecurityConfig:
     # ⚠️ 核心隐私原则：图片不落盘，仅内存处理
     TEMP_DIR: str = ""                            # 留空=内存处理，填写路径=落盘(调试用)
     RESPONSE_TIMEOUT: int = 60                    # 请求超时(秒)
-    # 请求频率限制
-    RATE_LIMIT_PER_MINUTE: int = 30
+    # 请求频率限制（滑动窗口）
+    RATE_LIMIT_PER_MINUTE: int = 30               # 每 IP 每分钟请求上限
+    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+    # API Key 鉴权（空=关闭，保持零门槛；部署时设 YINDUN_API_KEY 即开启）
+    API_KEY: str = os.getenv("YINDUN_API_KEY", "")
+    # CORS 白名单（逗号分隔；部署时用 YINDUN_CORS_ORIGINS 配置实际前端域名）
+    CORS_ALLOW_ORIGINS: list = [o.strip() for o in os.getenv(
+        "YINDUN_CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",") if o.strip()]
 
 # --- OCR 配置 ---
 class OCRConfig:

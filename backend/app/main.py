@@ -17,12 +17,13 @@
 import traceback
 import time
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes.ocr import router as ocr_router
-from app.core.config import OCRConfig
+from app.core.config import OCRConfig, SecurityConfig
+from app.core.security import RateLimitMiddleware, require_api_key
 from app.api.routes.desensitize import router as desensitize_router
 from app.api.routes.anti_restore import router as anti_restore_router
 
@@ -35,19 +36,23 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# --- CORS (允许前端跨域) ---
+# --- CORS (白名单，禁止全开放；部署时用 YINDUN_CORS_ORIGINS 配置实际域名) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应限制
+    allow_origins=SecurityConfig.CORS_ALLOW_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- 注册路由 (模块化，可插拔) ---
-app.include_router(ocr_router)
-app.include_router(desensitize_router)
-app.include_router(anti_restore_router)
+# --- 安全中间件：按 IP 限流（/api/* 除 /api/health；OPTIONS 预检不计入配额） ---
+# 注册顺序：CORS 在最外层，限流返回的 429 也能带上 CORS 头，前端可读
+app.add_middleware(RateLimitMiddleware)
+
+# --- 注册路由 (模块化，可插拔；API Key 鉴权依赖，默认关闭) ---
+app.include_router(ocr_router, dependencies=[Depends(require_api_key)])
+app.include_router(desensitize_router, dependencies=[Depends(require_api_key)])
+app.include_router(anti_restore_router, dependencies=[Depends(require_api_key)])
 
 
 # --- 启动事件：预热模型 (YOLO 先加载，避免 DLL 冲突) ---
