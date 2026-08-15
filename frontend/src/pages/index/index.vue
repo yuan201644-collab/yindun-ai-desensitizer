@@ -410,26 +410,31 @@ onUnmounted(() => { resetUpload() })
             <span class="scenario-icon">🌐</span>
             <span class="scenario-name">通用脱敏</span>
             <span class="scenario-desc">识别所有敏感信息，自己把关</span>
+            <span class="scenario-scope">{{ getTemplate('general').scopeLabel }}</span>
           </div>
           <div class="scenario-card" :class="{ active: activeTemplate === 'chat' }" @click="pickScenario('chat')">
             <span class="scenario-icon">🗨️</span>
             <span class="scenario-name">聊天截图脱敏</span>
             <span class="scenario-desc">微信/QQ截图，挡手机号/地址</span>
+            <span class="scenario-scope">{{ getTemplate('chat').scopeLabel }}</span>
           </div>
           <div class="scenario-card" :class="{ active: activeTemplate === 'idcard' }" @click="pickScenario('idcard')">
             <span class="scenario-icon">🪪</span>
             <span class="scenario-name">证件材料脱敏</span>
             <span class="scenario-desc">身份证/成绩单/简历，保留有效信息</span>
+            <span class="scenario-scope">{{ getTemplate('idcard').scopeLabel }}</span>
           </div>
           <div class="scenario-card" :class="{ active: activeTemplate === 'express' }" @click="pickScenario('express')">
             <span class="scenario-icon">📦</span>
             <span class="scenario-name">快递单脱敏</span>
             <span class="scenario-desc">晒单不泄露客户隐私，只打码关键信息</span>
+            <span class="scenario-scope">{{ getTemplate('express').scopeLabel }}</span>
           </div>
           <div class="scenario-card" @click="pickScenario('llm')">
             <span class="scenario-icon">🤖</span>
             <span class="scenario-name">AI 对话前置脱敏</span>
             <span class="scenario-desc">发给大模型前先过滤隐私</span>
+            <span class="scenario-scope">文本掩码 · 占位符 · 事后还原</span>
           </div>
         </div>
       </div>
@@ -627,6 +632,7 @@ onUnmounted(() => { resetUpload() })
 .scenario-icon { font-size: 22px; }
 .scenario-name { font-size: 13px; font-weight: 600; color: #c0c0e0; }
 .scenario-card.active .scenario-name { color: #6c63ff; }
+.scenario-scope { font-size: 11px; color: #8888aa; line-height: 1.4; }
 .scenario-desc { font-size: 11px; color: #6666aa; line-height: 1.4; }
 .workspace { display: flex; gap: 16px; margin-top: 16px; }
 .image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: hidden; min-height: 300px; }

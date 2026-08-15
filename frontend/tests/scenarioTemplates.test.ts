@@ -24,6 +24,13 @@ describe('场景模板库', () => {
     }
   })
 
+  it('所有模板都有打码范围提示 scopeLabel（分流卡片展示）', () => {
+    for (const t of SCENARIO_TEMPLATES) {
+      expect(t.scopeLabel, `${t.id} 缺 scopeLabel`).toBeTruthy()
+      expect(t.scopeLabel!.length).toBeGreaterThan(3)
+    }
+  })
+
   it('getTemplate 找不到时回退到通用', () => {
     expect(getTemplate('not-exist').id).toBe('general')
   })
