@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hitTestRegions, createRegionCycle, type Rect } from '../src/utils/regionSelect'
+import { hitTestRegions, createRegionCycle, selectableTextRegions, type Rect } from '../src/utils/regionSelect'
 
 const big: Rect = { x: 0, y: 0, w: 100, h: 100 }
 const small: Rect = { x: 20, y: 20, w: 30, h: 30 }
@@ -52,5 +52,39 @@ describe('createRegionCycle', () => {
     c.next(stack, { x: 30, y: 30 })
     c.reset()
     expect(c.next(stack, { x: 30, y: 30 })).toEqual(small)
+  })
+})
+
+describe('selectableTextRegions（全选只打码敏感内容）', () => {
+  const sensitive = { type: '身份证号' }
+  const R = (x: number, s: unknown): any => ({ rect: { x, y: 10, w: 100, h: 20 }, sensitive: s })
+
+  it('只返回 sensitive 的文本行，非敏感行排除', () => {
+    const rows = [R(0, sensitive), R(200, null), R(400, { type: '姓名' })]
+    const out = selectableTextRegions(rows)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toEqual({ x: 0, y: 10, w: 100, h: 20 })
+    expect(out[1]).toEqual({ x: 400, y: 10, w: 100, h: 20 })
+  })
+
+  it('出生/民族等非敏感行不进全选（用户反馈场景）', () => {
+    const rows = [
+      R(0, sensitive),                    // 身份证号内容
+      R(200, null),                       // 出生2006年8月29日（非敏感）
+      R(400, null),                       // 性别男民族汉（非敏感）
+    ]
+    const out = selectableTextRegions(rows)
+    expect(out).toHaveLength(1)
+    expect(out[0].x).toBe(0)
+  })
+
+  it('rect 原样透传（不修改）', () => {
+    const rows = [R(7, sensitive)]
+    expect(selectableTextRegions(rows)[0]).toEqual({ x: 7, y: 10, w: 100, h: 20 })
+  })
+
+  it('空数组 / 全非敏感 → 空', () => {
+    expect(selectableTextRegions([])).toEqual([])
+    expect(selectableTextRegions([R(0, null), R(100, null)])).toEqual([])
   })
 })

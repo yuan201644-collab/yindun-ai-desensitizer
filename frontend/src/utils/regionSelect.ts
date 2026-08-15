@@ -32,3 +32,14 @@ export function createRegionCycle(tolerance = 3) {
     },
   }
 }
+
+/** ⭐ 可全选的文本区域：只含敏感内容行（OCR 已把 rect 收缩到敏感值，字段标签保留）。
+ *  非敏感行（出生/民族/性别等标签行）与对象区域不进全选——"全选"= 全部敏感内容，
+ *  满足"只打码内容不打标签"诉求（用户反馈"出生年月和民族被全选打码"的根因）。 */
+export function selectableTextRegions(
+  textRegions: Array<{ rect: Rect; sensitive: unknown }>
+): Rect[] {
+  return textRegions
+    .filter(r => r.sensitive != null)
+    .map(r => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h }))
+}

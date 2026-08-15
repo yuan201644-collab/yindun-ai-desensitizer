@@ -10,7 +10,7 @@ import { recognizeLocal, detectNameColumn } from '../../utils/localOCR'
 import { assessComplexity, type ComplexityResult } from '../../utils/imageComplexity'
 import { setCheckImages, setCheckRegions } from '../../utils/checkTransfer'
 import { getOcrEstimateMs, recordOcrDuration } from '../../utils/ocrStats'
-import { hitTestRegions, createRegionCycle, type Rect } from '../../utils/regionSelect'
+import { hitTestRegions, createRegionCycle, selectableTextRegions, type Rect } from '../../utils/regionSelect'
 
 const { state: uploadState, handleFile, reset: resetUpload } = useImageUpload()
 const { loading: ocrLoading, textRegions, objectRegions, error: ocrError, detect: ocrDetect } = useOCR()
@@ -281,10 +281,9 @@ function prepareCheck() {
 interface RegionRect { x: number; y: number; w: number; h: number }
 interface CategoryGroup { key: string; label: string; regions: RegionRect[]; total: number; selectedCount: number }
 
-const allRegions = computed<RegionRect[]>(() => [
-  ...textRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })),
-  ...objectRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })),
-])
+// ⭐ 全选只覆盖"敏感内容"（OCR rect 已收缩到值）：非敏感行（出生/民族/性别等标签行）
+// 与 YOLO 对象区域（提示框）不进全选——满足"只打码内容不打标签"；对象框可手动点选
+const allRegions = computed<RegionRect[]>(() => selectableTextRegions(textRegions.value))
 
 const allSelected = computed(() => allRegions.value.length > 0 && allRegions.value.every(r => isRegionSelected(r)))
 
