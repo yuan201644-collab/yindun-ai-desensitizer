@@ -130,8 +130,9 @@ function gaussianRegion(
 
 /**
  * 像素化：降采样 + 升采样 + 随机微扰
+ * （导出供有效性评估脚本复刻同一算法与参数）
  */
-function pixelateRegion(
+export function pixelateRegion(
   imageData: ImageData,
   width: number,
   height: number,
@@ -179,8 +180,9 @@ function pixelateRegion(
 /**
  * 不可逆像素替换：分块随机重排 + 值注入
  * (简化版 — 完整版在服务端 Python 实现)
+ * （导出供有效性评估脚本复刻同一算法与参数）
  */
-function irreversibleRegion(
+export function irreversibleRegion(
   imageData: ImageData,
   width: number,
   height: number,
