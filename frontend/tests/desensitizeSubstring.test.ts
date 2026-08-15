@@ -53,12 +53,34 @@ describe('classifyText 子串定位（只打码内容不打标签）', () => {
     expect(classifyText('出生')).toBeNull()
   })
 
-  it('地址：只定位地址值（从「省」字起），标签保留', () => {
+  it('地址：只定位地址值（从「江苏省」起），标签保留', () => {
     const s = classifyText('住址：江苏省泗洪县青阳镇人民南路10号')
     expect(s?.type).toBe('家庭住址')
-    expect(s?.matched_text.startsWith('省')).toBe(true)
-    expect(s?.match_start).toBe(5)
+    expect(s?.matched_text.startsWith('江苏省')).toBe(true)
+    expect(s?.match_start).toBe(3)
     expect('住址：').not.toBe(s?.matched_text)
+  })
+
+  it('出生日期：只定位日期值，「出生」标签保留', () => {
+    const s = classifyText('出生2006年8月29日')
+    expect(s?.type).toBe('出生日期')
+    expect(s?.matched_text).toBe('2006年8月29日')
+    expect(s?.match_start).toBe(2)
+    expect(s?.match_end).toBe(12)
+  })
+
+  it('地址强化：单字位置词不误报', () => {
+    expect(classifyText('区图书馆')).toBeNull()
+    expect(classifyText('江宁特')).toBeNull()
+    expect(classifyText('华意泰富购物广场')).toBeNull()
+  })
+
+  it('地址无冒号（真实OCR）：标签「住址」不进打码范围', () => {
+    const s = classifyText('住址江苏省泗洪县青阳镇人民')
+    expect(s?.type).toBe('家庭住址')
+    expect(s?.matched_text.startsWith('江苏省')).toBe(true)
+    expect(s?.match_start).toBe(2)
+    expect(s?.matched_text).not.toContain('住址')
   })
 })
 

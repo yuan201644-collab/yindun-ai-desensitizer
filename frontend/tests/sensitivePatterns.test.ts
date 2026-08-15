@@ -15,6 +15,20 @@ describe('applyMask', () => {
   })
 })
 
+/** ⭐ 与后端 SENSITIVE_PATTERNS 对齐的必备类型（新增敏感类型需双端同步，此清单兜底） */
+const SYNC_REQUIRED_TYPES = [
+  '姓名', '出生日期', '身份证号', '手机号', '固定电话', '银行卡号',
+  '电子邮箱', '家庭住址', '车牌号', '快递单号', '统一社会信用代码', '护照号',
+]
+
+describe('模式库前后端同步', () => {
+  it('DEFAULT_PATTERNS 包含全部必备类型（与后端 SENSITIVE_PATTERNS 同步）', () => {
+    const types = new Set(DEFAULT_PATTERNS.map(p => p.type))
+    const missing = SYNC_REQUIRED_TYPES.filter(t => !types.has(t))
+    expect(missing).toEqual([])
+  })
+})
+
 describe('DEFAULT_PATTERNS 模式库', () => {
   it('检测并掩码身份证号（保留前3后4）', () => {
     const p = DEFAULT_PATTERNS.find(x => x.type === '身份证号')!

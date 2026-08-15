@@ -65,9 +65,10 @@ class TestClassifySubstring:
         s = svc._classify_sensitive("住址：江苏省泗洪县青阳镇人民南路10号")
         assert s is not None
         assert s["type"] == "家庭住址"
-        # 地址正则从「省」字开始（「江苏省」的「省」在 index 5）
-        assert s["matched_text"].startswith("省")
-        assert s["match_start"] == 5
+        # ⭐ 强化后地址正则从「江苏省」起匹配（「江苏」+「省」），标签「住址：」保留
+        assert s["matched_text"].startswith("江苏省")
+        assert "人民南路10号" in s["matched_text"]          # ⭐ group 须含完整地址（后缀），防只匹配位置词
+        assert s["match_start"] == 3
         assert "住址：" not in s["matched_text"]
 
     def test_pure_label_lines_not_sensitive(self, svc):
@@ -82,6 +83,47 @@ class TestClassifySubstring:
         assert s is not None
         assert s["match_start"] == 0
         assert s["match_end"] == 18
+
+    def test_birth_date_excludes_label(self, svc):
+        """出生日期：只定位日期值，不含「出生」标签"""
+        s = svc._classify_sensitive("出生2006年8月29日")
+        assert s is not None
+        assert s["type"] == "出生日期"
+        assert s["matched_text"] == "2006年8月29日"
+        assert s["match_start"] == 2
+        assert s["match_end"] == len("出生2006年8月29日")
+
+    def test_birth_date_with_space_and_colon(self, svc):
+        s = svc._classify_sensitive("出生：2006 年 8 月 29 日")
+        assert s is not None
+        assert s["matched_text"].replace(" ", "") == "2006年8月29日"
+        assert s["match_start"] == 3
+
+    def test_birth_label_alone_not_sensitive(self, svc):
+        assert svc._classify_sensitive("出生") is None
+        assert svc._classify_sensitive("出生地 南京") is None  # 无日期数字 → 不命中
+
+    def test_address_no_single_char_false_positive(self, svc):
+        """强化后：单字位置词不误报（「区图书馆」等）"""
+        assert svc._classify_sensitive("区图书馆") is None
+        assert svc._classify_sensitive("江宁特") is None
+        assert svc._classify_sensitive("华意泰富购物广场") is None
+
+    def test_address_short_suffix_line(self, svc):
+        """分行地址第二行（无前缀）也能命中（「南路」+「路」强词分支）"""
+        s = svc._classify_sensitive("南路10号")
+        assert s is not None
+        assert s["type"] == "家庭住址"
+
+    def test_address_no_colon_label_kept(self, svc):
+        """真实 OCR 无冒号（「住址江苏省…」）：标签「住址」不进敏感值（group=1 定位）"""
+        s = svc._classify_sensitive("住址江苏省泗洪县青阳镇人民")
+        assert s is not None
+        assert s["type"] == "家庭住址"
+        assert s["matched_text"].startswith("江苏省")            # 「住址」标签不在打码范围
+        assert "泗洪县青阳镇" in s["matched_text"]               # ⭐ 完整地址内容
+        assert "住址" not in s["matched_text"]
+        assert s["match_start"] == 2
 
 
 # ==================== 2. shrink_rect_to_match 纯函数 ====================

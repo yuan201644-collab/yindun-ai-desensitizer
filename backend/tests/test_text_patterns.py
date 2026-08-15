@@ -64,3 +64,66 @@ def test_landline_pattern_rejects_short_and_mobile():
     p = SENSITIVE_PATTERNS["固定电话"]
     assert not re.search(p["pattern"], "0211234")
     assert not re.search(p["pattern"], "13812345678")
+
+
+# ---------- 地址正则强化（前后端同步） ----------
+
+def test_address_strengthened_matches_full_chain():
+    p = SENSITIVE_PATTERNS["家庭住址"]
+    assert re.search(p["pattern"], "江苏省南京市江宁区东山街道上元大街559")
+    assert re.search(p["pattern"], "人民南路10号")
+    assert re.search(p["pattern"], "南路10号")
+    assert re.search(p["pattern"], "青阳镇人民南路10号")
+
+
+def test_address_strengthened_no_single_char_false_positive():
+    """弱位置词（区/号/栋/室/楼）需 2-6 汉字前缀——「区图书馆」单字触发被挡"""
+    p = SENSITIVE_PATTERNS["家庭住址"]
+    assert not re.search(p["pattern"], "区图书馆")
+    assert not re.search(p["pattern"], "江宁特")
+    assert not re.search(p["pattern"], "华意泰富购物广场")
+    assert not re.search(p["pattern"], "身份证号码")
+
+
+def test_address_strengthened_keeps_number_literal():
+    """「号码」的「号」不触发（号(?!码)）"""
+    p = SENSITIVE_PATTERNS["家庭住址"]
+    assert not re.search(p["pattern"], "公民身份号码321324200608290077")
+
+
+# ---------- 出生日期模式 ----------
+
+def test_birth_date_pattern_matches():
+    p = SENSITIVE_PATTERNS["出生日期"]
+    assert p["group"] == 1
+    m = re.search(p["pattern"], "出生2006年8月29日")
+    assert m is not None
+    assert m.group(1) == "2006年8月29日"          # 不含「出生」标签
+    assert m.start(1) == 2
+
+
+def test_birth_date_with_space_colon():
+    p = SENSITIVE_PATTERNS["出生日期"]
+    m = re.search(p["pattern"], "出生：2006 年 8 月 29 日")
+    assert m is not None
+    assert m.group(1).replace(" ", "") == "2006年8月29日"
+
+
+def test_birth_date_rejects_label_only():
+    p = SENSITIVE_PATTERNS["出生日期"]
+    assert not re.search(p["pattern"], "出生")
+    assert not re.search(p["pattern"], "出生地 南京")
+
+
+# ---------- 前后端模式库同步清单（必备类型） ----------
+
+SYNC_REQUIRED_TYPES = [
+    "姓名", "出生日期", "身份证号", "手机号", "固定电话", "银行卡号",
+    "电子邮箱", "家庭住址", "车牌号", "快递单号", "统一社会信用代码", "护照号",
+]
+
+
+def test_pattern_library_contains_sync_required_types():
+    """与前端 DEFAULT_PATTERNS 对齐的必备类型清单（新增类型需双端同步）"""
+    missing = [t for t in SYNC_REQUIRED_TYPES if t not in SENSITIVE_PATTERNS]
+    assert missing == [], f"后端模式库缺少必备类型: {missing}"
