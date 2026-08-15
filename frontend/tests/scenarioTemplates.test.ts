@@ -48,4 +48,15 @@ describe('filterPatternsByTemplate', () => {
     const filtered = filterPatternsByTemplate(DEFAULT_PATTERNS, chat)
     expect(filtered.map(p => p.type)).toEqual(['手机号', '电子邮箱', '家庭住址'])
   })
+
+  it('证件材料模板包含姓名与出生日期（图片自动选区 + 文本流均生效）', () => {
+    const idcard = getTemplate('idcard')
+    for (const type of ['姓名', '出生日期']) {
+      expect(idcard.activeTypes).toContain(type)
+      expect(idcard.preferTypes).toContain(type)
+    }
+    const filtered = filterPatternsByTemplate(DEFAULT_PATTERNS, idcard)
+    expect(filtered.map(p => p.type)).toContain('姓名')
+    expect(filtered.map(p => p.type)).toContain('出生日期')
+  })
 })
