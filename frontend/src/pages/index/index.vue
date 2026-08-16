@@ -26,6 +26,17 @@ const activeTab = ref<'detect' | 'desensitize' | 'result'>('detect')
 const showHelp = ref(true)
 const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
+
+// ⭐ 预览缩放（0.5~3，滚轮 + 按钮）：wrap 宽度按 zoom 缩放，overlay 框同步
+const zoom = ref(1)
+const zoomStep = 0.25
+function zoomIn() { zoom.value = Math.min(3, +(zoom.value + zoomStep).toFixed(2)) }
+function zoomOut() { zoom.value = Math.max(0.5, +(zoom.value - zoomStep).toFixed(2)) }
+function zoomReset() { zoom.value = 1 }
+function onWheelZoom(e: WheelEvent) {
+  e.preventDefault()
+  if (e.deltaY < 0) zoomIn(); else zoomOut()
+}
 const detectEmpty = ref(false)
 const complexity = ref<ComplexityResult | null>(null)
 // 手动画框：人工二次修正（OCR 漏检时手动补框）
@@ -462,12 +473,12 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 工作区 -->
     <div class="workspace" v-if="uploadState.status === 'ready'">
-      <div class="image-panel fade-in" @mousedown="onPanelDown" @mousemove="onPanelMove" @mouseup="onPanelUp">
-        <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
-        <!-- ⭐ overlay 定位容器：wrap 包裹 img，overlay 相对图片渲染区域（修复识别框错位/超界） -->
-        <div v-show="!isProcessed" class="preview-wrap">
-          <img :src="uploadState.previewUrl" class="preview-image" />
-          <div v-if="(textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
+      <div class="image-panel fade-in" @mousedown="onPanelDown" @mousemove="onPanelMove" @mouseup="onPanelUp" @wheel.prevent="onWheelZoom">
+        <!-- ⭐ 缩放容器：wrap 包 canvas/img/overlay，宽度按 zoom 缩放（0.5~3），框随图同步放大 -->
+        <div class="preview-wrap" :style="{ width: `calc(100% * ${zoom})`, margin: '0 auto' }">
+          <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
+          <img v-show="!isProcessed" :src="uploadState.previewUrl" class="preview-image" />
+          <div v-if="!isProcessed && (textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
           <div v-for="(region, i) in textRegions" :key="'t'+i" class="region-box"
             :class="{
               'risk-high': region.sensitive?.risk_level === 'high',
@@ -504,6 +515,12 @@ onUnmounted(() => { resetUpload() })
             height: drawBox.h / uploadState.height * 100 + '%',
           }"></div>
           </div>
+        </div>
+        <div class="zoom-controls">
+          <button class="zoom-btn" @click.stop="zoomOut" :disabled="zoom <= 0.5" title="缩小">−</button>
+          <span class="zoom-pct">{{ Math.round(zoom * 100) }}%</span>
+          <button class="zoom-btn" @click.stop="zoomIn" :disabled="zoom >= 3" title="放大">＋</button>
+          <button class="zoom-btn" @click.stop="zoomReset" title="重置 100%">⟳</button>
         </div>
         <div v-if="ocrLoading" class="loading-overlay fade-in">
           <div class="scan-frame"><div class="scan-line"></div></div>
@@ -641,12 +658,15 @@ onUnmounted(() => { resetUpload() })
 .scenario-example { font-size: 11px; color: #22c55e; font-family: monospace; line-height: 1.4; }
 .scenario-desc { font-size: 11px; color: #6666aa; line-height: 1.4; }
 .workspace { display: flex; gap: 16px; margin-top: 16px; }
-.image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: hidden; min-height: 300px; }
+.image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: auto; min-height: 300px; }
 .preview-canvas, .preview-image { width: 100%; display: block; }
-/* ⭐ overlay 定位容器：wrap 尺寸 = 图片渲染尺寸（img width:100% 撑宽、高度随比例），
-   overlay 相对 wrap 定位 → 识别框与文字精确对齐（修复"框错位/超出图片界限"老问题） */
+/* ⭐ 缩放容器：wrap 尺寸 = 图片渲染尺寸（宽度随 zoom），overlay 相对 wrap 定位（识别框与文字精确对齐） */
 .preview-wrap { position: relative; width: 100%; display: block; }
 .overlay { position: absolute; inset: 0; pointer-events: none; }
+.zoom-controls { position: absolute; top: 8px; left: 8px; z-index: 20; display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.65); border-radius: 8px; padding: 4px 6px; pointer-events: auto; }
+.zoom-btn { background: #2a2a4a; color: #e0e0f0; border: 1px solid #3a3a5a; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: 14px; line-height: 1; }
+.zoom-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.zoom-pct { color: #aaaacc; font-size: 12px; min-width: 40px; text-align: center; }
 .region-box { position: absolute; border: 2px solid #ffcc00; background: rgba(255,204,0,0.08); border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
 .region-box.risk-high { border-color: #ff4444; background: rgba(255,68,68,0.12); }
 .region-box.risk-medium { border-color: #ffaa00; background: rgba(255,170,0,0.10); }
