@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_PATTERNS, applyMask } from '../src/utils/sensitivePatterns'
+import { DEFAULT_PATTERNS, applyMask, classifyText } from '../src/utils/sensitivePatterns'
 
 describe('applyMask', () => {
   it('masks middle digits keeping first 3 and last 4', () => {
@@ -26,6 +26,18 @@ describe('模式库前后端同步', () => {
     const types = new Set(DEFAULT_PATTERNS.map(p => p.type))
     const missing = SYNC_REQUIRED_TYPES.filter(t => !types.has(t))
     expect(missing).toEqual([])
+  })
+
+  it('手机号命中「姓名紧贴手机号」且只定位号码（评估残留修复）', () => {
+    const s = classifyText('柳予威18665533578')
+    expect(s?.type).toBe('手机号')
+    expect(s?.matched_text).toBe('18665533578')
+    expect(s?.match_start).toBe(3)
+  })
+
+  it('手机号排除数字拼接', () => {
+    expect(classifyText('12313800138000')?.matched_text).not.toBe('13800138000')
+    expect(classifyText('138001380004567')?.matched_text).not.toBe('13800138000')
   })
 })
 

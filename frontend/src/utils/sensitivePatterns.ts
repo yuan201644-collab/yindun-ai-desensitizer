@@ -54,7 +54,8 @@ export const DEFAULT_PATTERNS: SensitivePattern[] = [
   },
   {
     type: '手机号',
-    pattern: /1[3-9]\d{9}/g,
+    // ⭐ 前后视排除数字拼接；中文前缀（姓名紧贴手机号）仍可命中（与后端对齐）
+    pattern: /(?<![0-9])1[3-9]\d{9}(?![0-9])/g,
     category: 'contact',
     riskLevel: 'high',
     keepFirst: 3,

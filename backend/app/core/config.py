@@ -143,7 +143,9 @@ SENSITIVE_PATTERNS = {
         "risk_level": "high",
     },
     "手机号": {
-        "pattern": r"\b1[3-9]\d{9}\b",
+        # ⭐ (?<![0-9]) 允许中文前缀（姓名紧贴手机号「张三138…」可命中，Python \b 对中文不成立会漏检）；
+        #   前/后视排除数字拼接（长数字串中的片段不命中）
+        "pattern": r"(?<![0-9])1[3-9]\d{9}(?![0-9])",
         "category": "contact",
         "risk_level": "high",
     },

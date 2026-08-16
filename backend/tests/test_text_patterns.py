@@ -66,6 +66,22 @@ def test_landline_pattern_rejects_short_and_mobile():
     assert not re.search(p["pattern"], "13812345678")
 
 
+def test_mobile_pattern_matches_name_adjacent():
+    """姓名紧贴手机号（无分隔）→ 命中（Python \\b 对中文不成立会漏检，已修为 (?<![0-9])）"""
+    p = SENSITIVE_PATTERNS["手机号"]
+    m = re.search(p["pattern"], "柳予威18665533578")
+    assert m is not None
+    assert m.group() == "18665533578"
+    assert m.start() == 3  # 从手机号开始（姓名标签不打码）
+
+
+def test_mobile_pattern_rejects_digit_padding():
+    """长数字串中的片段不命中（前/后视排除数字拼接）"""
+    p = SENSITIVE_PATTERNS["手机号"]
+    assert not re.search(p["pattern"], "12313800138000")     # 前面有数字
+    assert not re.search(p["pattern"], "138001380004567")    # 后面有数字
+
+
 # ---------- 地址正则强化（前后端同步） ----------
 
 def test_address_strengthened_matches_full_chain():
