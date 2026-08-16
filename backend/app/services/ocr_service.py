@@ -125,8 +125,39 @@ class OCRService:
             ink_ratio = float(mask.mean())
             if ink_ratio < OCRConfig.MIN_INK_RATIO:
                 continue  # 框内几乎无文字 → 空白背景误检
-            ys, xs = np.where(mask)
             pad = OCRConfig.BOX_PADDING
+            # ⭐ 主文字带收紧：PaddleOCR 检测框在字段密集单据上常跨多行（快递单实测
+            #   「收件人：王伟转袁润熙」框含 3 行墨水）——按"连续墨水带"取墨水总量
+            #   最大的带作为文字带（text 所在行墨水最密集），排除邻行与横线。
+            row_ink = mask.sum(axis=1) / mask.shape[1]
+            has = row_ink > 0.04
+            bands = []
+            in_b = False
+            for i, v in enumerate(has):
+                if v and not in_b:
+                    in_b = True
+                    s = i
+                elif not v and in_b:
+                    in_b = False
+                    bands.append((s, i - 1))
+            if in_b:
+                bands.append((s, len(has) - 1))
+            # ⭐ 合并相邻带（间隙 ≤4 行视为同一文字带）：笔画行间空隙/字间空隙
+            #   会把同一行文字切成多个小带；跨行文字行距通常 >4 不会误合并
+            merged = []
+            for b in bands:
+                if merged and b[0] - merged[-1][1] <= 4:
+                    merged[-1] = (merged[-1][0], b[1])
+                else:
+                    merged.append(b)
+            bands = merged
+            if bands:
+                best = max(bands, key=lambda b: float(row_ink[b[0]:b[1] + 1].sum()))
+                band_mask = mask[best[0]:best[1] + 1]
+                ys = np.where(band_mask.any(axis=1))[0] + best[0]
+                xs = np.where(band_mask.any(axis=0))[0]
+            else:
+                ys, xs = np.where(mask)
             nx0 = max(x, x + int(xs.min()) - pad)
             ny0 = max(y, y + int(ys.min()) - pad)
             nx1 = min(x + w - 1, x + int(xs.max()) + pad)

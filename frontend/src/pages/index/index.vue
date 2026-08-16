@@ -483,7 +483,7 @@ onUnmounted(() => { resetUpload() })
               height: (region.rect.h / uploadState.height * 100) + '%',
             }"
             @click.stop="handleRegionClick($event, {x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
-            <span class="region-label">{{ region.sensitive?.object_label || region.sensitive?.type || region.text }}</span>
+            <span class="region-label" :title="region.sensitive?.object_label || region.sensitive?.type || region.text">{{ region.sensitive?.object_label || region.sensitive?.type || region.text }}</span>
           </div>
           <div v-for="(region, i) in objectRegions" :key="'o'+i" class="region-box object-region"
             :class="{ selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}), 'region-selected-anim': isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}) }"
@@ -494,7 +494,7 @@ onUnmounted(() => { resetUpload() })
               height: (region.rect.h / uploadState.height * 100) + '%',
             }"
             @click.stop="handleRegionClick($event, {x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
-            <span class="region-label">{{ region.label }}</span>
+            <span class="region-label" :title="region.label">{{ region.label }}</span>
           </div>
           <!-- 手动画框：拖拽中的临时框（原图像素坐标） -->
           <div v-if="drawBox" class="region-box selected draw-box" :style="{
