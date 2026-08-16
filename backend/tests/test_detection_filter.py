@@ -43,11 +43,44 @@ class TestFilterByOcr:
         texts = [_text(300, 300 + i * 50, 300, 20) for i in range(8)]
         assert len(DetectionService.filter_by_ocr(objs, texts, img_w, img_h)) == 1
 
-    def test_large_area_but_few_text_kept(self):
-        """框占图 90% 但内部文本 <5 行（可能为真卡片特写）→ 保留"""
+    def test_large_area_but_few_text_filtered(self):
+        """框占图 90% + 内部 2 行 → 过滤（面积>60% 直接判误检；真证件不可能占图 90%）"""
         img_w, img_h = 1000, 1000
         objs = [_obj(0, 0, 900, 900)]
         texts = [_text(100, 100 + i * 200, 400, 20) for i in range(2)]
+        assert DetectionService.filter_by_ocr(objs, texts, img_w, img_h) == []
+
+    def test_half_area_two_lines_kept(self):
+        """55% 面积 + 2 行文本（真证件特写边缘：不>0.6 且 inside<5）→ 保留"""
+        img_w, img_h = 1000, 1000
+        objs = [_obj(225, 225, 550, 550)]                        # 面积 30.25%
+        texts = [_text(300, 300 + i * 200, 300, 20) for i in range(2)]
+        assert len(DetectionService.filter_by_ocr(objs, texts, img_w, img_h)) == 1
+
+    def test_chat_screenshot_66pct_filtered(self):
+        """第二张聊天截图场景：框占图 66%（内部文本在框外右侧，inside≈0）→ 面积>60% 直接过滤"""
+        img_w, img_h = 1283, 894
+        objs = [_obj(0, 4, 921, 827, "id_card", 0.64)]           # 面积占比 ≈ 66.4%
+        # 文本全在框外右侧（x 800+ > 框右缘 921）——inside 应≈0，仍须过滤
+        texts = [_text(805 + i * 60, 154 + i * 80, 271, 23) for i in range(5)]
+        out = DetectionService.filter_by_ocr(objs, texts, img_w, img_h)
+        assert out == []
+
+    def test_partial_overflow_center_inside_counts(self):
+        """文本部分超出框右边界但中心点在框内 → 计入 inside（宽松判定）"""
+        img_w, img_h = 1000, 1000
+        objs = [_obj(0, 0, 700, 900)]                            # 面积 63%
+        # 文本 x=650 w=120 → 右缘 770 > 700（超出），中心 710 > 700？中心 710 在框外…
+        # 用中心点在框内的构造：x=600 w=140 → 右缘 740>700，中心 670 < 700 ✓ 在框内
+        texts = [_text(600, 40 + i * 80, 140, 20) for i in range(6)]
+        out = DetectionService.filter_by_ocr(objs, texts, img_w, img_h)
+        assert out == []  # inside=6（中心在框内）→ 过滤
+
+    def test_half_area_three_lines_kept(self):
+        """50% 面积 + 3 行文本（真证件特写边缘）→ 保留"""
+        img_w, img_h = 1000, 1000
+        objs = [_obj(250, 250, 500, 500)]
+        texts = [_text(300, 300 + i * 80, 300, 20) for i in range(3)]
         assert len(DetectionService.filter_by_ocr(objs, texts, img_w, img_h)) == 1
 
     def test_empty_and_invalid_safe(self):

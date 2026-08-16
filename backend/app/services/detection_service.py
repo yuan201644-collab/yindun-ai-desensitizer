@@ -85,15 +85,18 @@ class DetectionService:
             if not r or r["w"] <= 0 or r["h"] <= 0:
                 continue
             area_ratio = (r["w"] * r["h"]) / max(1, img_w * img_h)
+            # ⭐ 中心点在框内计数（宽松判定：聊天截图文本常部分超出误检框右边界，完全包含会漏计数）
             inside = sum(
                 1 for t in text_regions
                 if t.get("rect")
-                and t["rect"]["x"] >= r["x"] and t["rect"]["y"] >= r["y"]
-                and t["rect"]["x"] + t["rect"]["w"] <= r["x"] + r["w"]
-                and t["rect"]["y"] + t["rect"]["h"] <= r["y"] + r["h"]
+                and r["x"] <= t["rect"]["x"] + t["rect"]["w"] / 2 <= r["x"] + r["w"]
+                and r["y"] <= t["rect"]["y"] + t["rect"]["h"] / 2 <= r["y"] + r["h"]
             )
-            # 误检特征：框占图 >80% 且内部 >=5 行文本（证件不会整图+满文字）
-            if area_ratio > 0.8 and inside >= 5:
+            # 误检特征（聊天/文档截图被 YOLO 整体当证件，实测两张聊天截图框占 66%~90%）：
+            #   ① 框占图 >60% —— 无论内部文本多少（第二张聊天截图框内文本在框外右侧）
+            #   ② 框占 50-60% 且内部 >=5 行文本（配合中心点计数）
+            # 真证件框通常 <50%（测试图 ~11%），不受影响
+            if area_ratio > 0.6 or (area_ratio > 0.5 and inside >= 5):
                 print(f"[Detection] 过滤误检 {obj.get('label')} conf={obj.get('confidence')} 面积占比={area_ratio:.2f} 内部文本={inside}行")
                 continue
             out.append(obj)
