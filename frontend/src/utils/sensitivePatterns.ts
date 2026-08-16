@@ -24,6 +24,26 @@ export interface SensitivePattern {
 /** ⚠️ 可修改扩展：在此数组添加新的敏感信息模式 */
 export const DEFAULT_PATTERNS: SensitivePattern[] = [
   {
+    type: '签发机关',
+    pattern: /(?:签发机关|机关)[:：\s]*([\u4e00-\u9fa5]{2,15})/g,
+    category: 'identity',
+    riskLevel: 'medium',
+    keepFirst: 0,
+    keepLast: 0,
+    maskChar: '█',
+    group: 1,
+  },
+  {
+    type: '有效期限',
+    pattern: /(?:有效期限|有效期)[:：\s]*([0-9]{4}\s*[./-]\s*[0-9]{1,2}\s*[./-]\s*[0-9]{1,2}[^\n]{0,12}|长期)/g,
+    category: 'identity',
+    riskLevel: 'medium',
+    keepFirst: 0,
+    keepLast: 0,
+    maskChar: '█',
+    group: 1,
+  },
+  {
     type: '出生日期',
     pattern: /(?:出生)[:：\s]*(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日?)/g,
     category: 'identity',
@@ -112,8 +132,8 @@ export const DEFAULT_PATTERNS: SensitivePattern[] = [
     // ⭐ 显式标签前缀（住址/地址/户籍/籍贯等，可选）——标签不进敏感值；
     //   强位置词（省/市/县/镇/乡/村/路/街/道/巷）：1-4 汉字前缀即可；
     //   弱位置词（区/号/栋/室/楼/单元）：要求 2-6 汉字前缀（挡「区图书馆」单字触发）；
-    //   号(?!码) 排除「号码/单号」；后缀不吞标点；group=1 → 只打码地址内容（与后端同串）
-    pattern: /(?:家庭住址|常住地址|现住地|住址|地址|户籍|籍贯)?((?:[\u4e00-\u9fa5]{1,4}(?:省|市|县|镇|乡|村|路|街|道|巷)|[\u4e00-\u9fa5]{2,6}(?:区|栋|室|楼|单元))[\u4e00-\u9fa5\d]{0,20})/g,
+    //   机关负向前瞻排除「泗洪县公安局」类；「(?<!城)市」排除「城市」；group=1（与后端同串）
+    pattern: /(?:家庭住址|常住地址|现住地|住址|地址|户籍|籍贯)?((?:[\u4e00-\u9fa5]{1,4}(?:省|(?<!城)市|县|镇|乡|村|路|街|道|巷)(?!机关|公安局|法院|检察院|税务局|委员会|办公室|派出所|人民政府)|[\u4e00-\u9fa5]{2,6}(?:区|栋|室|楼|单元))[\u4e00-\u9fa5\d]{0,20})/g,
     category: 'location',
     riskLevel: 'high',
     keepFirst: 0,

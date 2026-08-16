@@ -19,6 +19,7 @@ describe('applyMask', () => {
 const SYNC_REQUIRED_TYPES = [
   '姓名', '出生日期', '身份证号', '手机号', '固定电话', '银行卡号',
   '电子邮箱', '家庭住址', '车牌号', '快递单号', '统一社会信用代码', '护照号',
+  '签发机关', '有效期限',
 ]
 
 describe('模式库前后端同步', () => {
@@ -38,6 +39,24 @@ describe('模式库前后端同步', () => {
   it('手机号排除数字拼接', () => {
     expect(classifyText('12313800138000')?.matched_text).not.toBe('13800138000')
     expect(classifyText('138001380004567')?.matched_text).not.toBe('13800138000')
+  })
+
+  it('地址排除机关/城市误报（机关行正确归签发机关而非地址）', () => {
+    const s = classifyText('机关泗洪县公安局')
+    expect(s?.type).toBe('签发机关')   // 新增模式正确归类，不再是家庭住址误报
+    expect(s?.matched_text).toBe('泗洪县公安局')
+    expect(classifyText('寄达城市')).toBeNull()
+    expect(classifyText('江苏省南京市江宁区东山街道上元大街559')?.type).toBe('家庭住址')
+  })
+
+  it('签发机关/有效期限识别（只取值、标签保留）', () => {
+    const a = classifyText('签发机关泗洪县公安局')
+    expect(a?.type).toBe('签发机关')
+    expect(a?.matched_text).toBe('泗洪县公安局')
+    expect(a?.match_start).toBe(4)
+    const v = classifyText('有效期限2026.08.29-2046.08.29')
+    expect(v?.type).toBe('有效期限')
+    expect(v?.matched_text.startsWith('2026.08.29')).toBe(true)
   })
 })
 

@@ -131,11 +131,54 @@ def test_birth_date_rejects_label_only():
     assert not re.search(p["pattern"], "出生地 南京")
 
 
+# ---------- 误报修复：地址机关/城市排除 + QQ 上下文 + 身份证背面 ----------
+
+def test_address_rejects_authority_and_city():
+    """「泗洪县公安局」「寄达城市」不误标地址"""
+    p = SENSITIVE_PATTERNS["家庭住址"]
+    assert not re.search(p["pattern"], "机关泗洪县公安局")
+    assert not re.search(p["pattern"], "寄达城市")
+
+
+def test_address_still_matches_real():
+    p = SENSITIVE_PATTERNS["家庭住址"]
+    assert re.search(p["pattern"], "江苏省南京市江宁区东山街道上元大街559")
+    assert re.search(p["pattern"], "人民南路10号")
+
+
+def test_qq_requires_context():
+    """裸数字（邮编/热线/日期）不标 QQ；QQ 前缀才命中且只取号码"""
+    p = SENSITIVE_PATTERNS["QQ号"]
+    assert not re.search(p["pattern"], "223900")
+    assert not re.search(p["pattern"], "11183")
+    m = re.search(p["pattern"], "QQ：12345678")
+    assert m is not None
+    assert m.group(1) == "12345678"
+    assert m.start(1) == 3  # 只打码号码，「QQ：」标签保留
+
+
+def test_issue_authority_pattern():
+    p = SENSITIVE_PATTERNS["签发机关"]
+    m = re.search(p["pattern"], "签发机关泗洪县公安局")
+    assert m is not None
+    assert m.group(1) == "泗洪县公安局"
+    assert m.start(1) == 4
+
+
+def test_validity_period_pattern():
+    p = SENSITIVE_PATTERNS["有效期限"]
+    m = re.search(p["pattern"], "有效期限2026.08.29-2046.08.29")
+    assert m is not None
+    assert m.group(1).startswith("2026.08.29")
+    assert re.search(p["pattern"], "有效期 长期") is not None
+
+
 # ---------- 前后端模式库同步清单（必备类型） ----------
 
 SYNC_REQUIRED_TYPES = [
     "姓名", "出生日期", "身份证号", "手机号", "固定电话", "银行卡号",
     "电子邮箱", "家庭住址", "车牌号", "快递单号", "统一社会信用代码", "护照号",
+    "签发机关", "有效期限",
 ]
 
 
