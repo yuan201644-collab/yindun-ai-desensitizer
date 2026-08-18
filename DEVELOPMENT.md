@@ -1,7 +1,7 @@
 # 隐盾 (yindun) 开发交接文档
 
 > **用途**：新会话读取此文档即可完整接手「隐盾」项目。包含当前架构、双 Agent 工作流、版本号规范、发布政策、测试方式、踩坑记录。
-> **最后更新**：2026-08-02（1.0.0-alpha）
+> **最后更新**：2026-08-18（1.0.0-alpha）
 > **GitHub**：https://github.com/yuan201644-collab/yindun-ai-desensitizer.git
 
 ---
@@ -220,7 +220,37 @@ planning → coding → testing → done
 
 ---
 
-## 十、测试方式
+## 十、测试资源与环境事实（新 agent 必读 · 防踩坑）
+
+> ⚠️ **本机环境事实**（Windows 开发机，2026-08-18 确认）：
+> - **无 bash / 无 WSL**：`./tools/*.sh` 在 PowerShell 里**不能直接跑**（会报 "Cannot run a document" 或路由到未安装的 WSL）。✅ 正确做法：
+>   - 后端测试：`Set-Location backend; python -m pytest tests/ -q`
+>   - 前端测试：`Set-Location frontend; npm.cmd test`（用 `npm.cmd`，不是 `npm`——ps1 被执行策略挡）
+>   - TS 检查：`Set-Location frontend; npx.cmd vue-tsc --noEmit`
+> - **PowerShell `Get-ChildItem -Include` 必须配 `-Recurse` 或通配路径**，否则匹配为空（本次排查测试图时踩过，白白浪费时间）。
+
+### 10.0 测试图片位置（重要 · 勿丢）
+
+**全部测试图片在系统截图目录，不在仓库内：`C:\Users\86133\Pictures\Screenshots\`**
+
+6 张标准评测图（对应 `testcases/eval_masking.py`）：
+
+| # | 场景 | 文件名 |
+|---|------|--------|
+| 1 | 身份证正面 | `ea4f9b378bcf45a38b9959efe380ca7f.jpg` |
+| 2 | 身份证背面 | `908bcd8485e50b1890dd3e2a29836a70.jpg` |
+| 3 | 聊天截图 | `屏幕截图 2026-08-15 135005.png` |
+| 4 | 聊天截图 2 | `屏幕截图 2026-08-16 103218.png` |
+| 5 | 快递单 | `5fda231696902dc03ec0deeba87976bc.jpg` |
+| 6 | 营业执照 | `dae1525f19f15fb2cfb736ac265b5f0c.jpg` |
+
+完整索引（含大小/用途/安全约束）见 `testcases/测试资源索引.md`。
+
+**⚠️ 安全约束**：以上图片含**真实个人信息**（真实姓名/身份证号），仅限本地测试，禁止进 git、禁止放交付物、禁止上传外部服务。
+
+---
+
+## 十一、测试方式
 
 ### 10.1 一键全量
 ```bash
@@ -245,7 +275,7 @@ planning → coding → testing → done
 
 ---
 
-## 十一、部署与上传
+## 十二、部署与上传
 
 - **后端**：`cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000`（GPU 加 `USE_GPU=true`）
 - **前端**：`cd frontend && npm run dev`（或 `npm run build`）
@@ -255,7 +285,7 @@ planning → coding → testing → done
 
 ---
 
-## 十二、踩坑记录
+## 十三、踩坑记录
 
 1. **claude CLI 参数（v2.x）**：`--project ./` 和 `--permission-mode acceptEdits` **不支持**（unknown option）。✅ 正确：`claude -p "<prompt>" --allowedTools "Read Grep Glob Edit Write Bash(git status) ..."`；`-p` = headless（跑完即退出）；项目 = 当前目录（先 cd）。
 2. **热循环守卫**：全自动脚本必须"状态连续 N 轮不变就强制停止"（`MAX_STALL=3`），否则 agent 报错会无限重发。
@@ -266,10 +296,16 @@ planning → coding → testing → done
 7. **PowerShell 跑 bash**：`&&` 是 bash 语法；且 PowerShell 的 `bash` 可能路由到 WSL（没装发行版会报错）。用 git-bash 或 `bash ./脚本.sh`。
 8. **status.json 解析**：用 `jq`（无 jq 用 grep fallback，orchestrator 已内置）。
 9. **时间戳规范**：agent 更新 `last_updated` 必须用 `date '+%Y-%m-%d %H:%M'` 取真实时钟，否则多 agent 时间戳错乱。
+10. **【元信息丢失教训 · 2026-08-18】测试图位置没写进交接文档 → 新 agent 找不到测试图**：项目有 `DEVELOPMENT.md`（设计为"新会话读它即可接手"），但漏记了测试图片位置（实际在 `C:\Users\86133\Pictures\Screenshots\`，不在仓库）。结果新会话排查问题时在 `testcases/` 里找图找不到，浪费大量时间。
+    **防复发机制（已落地）**：
+    - `DEVELOPMENT.md` 新增「十、测试资源与环境事实」章节，含 6 张测试图清单 + 本机环境事实（无 bash/WSL、PowerShell 特殊性）
+    - `testcases/测试资源索引.md` 建立完整资源索引
+    - `architect_prompt.md` / `engineer_prompt.md` 的"启动后第一步"已改为**强制先读 DEVELOPMENT.md + status.json + task.md**
+    - **教训原则：凡是"换了 agent 就不知道"的项目事实（路径/资源/环境/约束），一律写进 DEVELOPMENT.md；凡是"必须一上来就看的"入口文件，写进 agent prompt 的启动步骤。不要依赖 agent 自己想起来去翻仓库。**
 
 ---
 
-## 十三、相关文档
+## 十四、相关文档
 
 - `README.md` — 用户向项目介绍
 - `CHANGELOG.md` — 版本记录 + 版本号规范
