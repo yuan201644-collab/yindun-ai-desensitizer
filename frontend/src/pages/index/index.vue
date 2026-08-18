@@ -27,15 +27,35 @@ const showHelp = ref(true)
 const activeTemplate = ref('general')
 const activeTemplateObj = computed(() => getTemplate(activeTemplate.value))
 
-// ⭐ 预览缩放（0.5~3，滚轮 + 按钮）：wrap 宽度按 zoom 缩放，overlay 框同步
+// ⭐ 预览缩放与平移：transform scale(zoom) + translate(pan)，滚轮以光标为中心缩放，非画框时拖拽平移
 const zoom = ref(1)
 const zoomStep = 0.25
-function zoomIn() { zoom.value = Math.min(3, +(zoom.value + zoomStep).toFixed(2)) }
-function zoomOut() { zoom.value = Math.max(0.5, +(zoom.value - zoomStep).toFixed(2)) }
-function zoomReset() { zoom.value = 1 }
+const pan = ref({ x: 0, y: 0 })
+let panStart: { x: number; y: number; panX: number; panY: number } | null = null
+const panning = ref(false)
+/** 以某 client 坐标为缩放中心，调整 pan 使光标下的图片点保持不动（transform: translate(p) scale(z) 推导） */
+function zoomAt(cx: number, cy: number, newZoom: number) {
+  const wrap = document.querySelector<HTMLElement>('.preview-wrap')
+  if (!wrap) { zoom.value = newZoom; return }
+  const r = wrap.getBoundingClientRect()
+  const k = newZoom / zoom.value
+  pan.value.x += (cx - r.left) * (1 - k)
+  pan.value.y += (cy - r.top) * (1 - k)
+  zoom.value = newZoom
+}
+function zoomAtCenter(t: number) {
+  const wrap = document.querySelector<HTMLElement>('.preview-wrap')
+  if (!wrap) { zoom.value = t; return }
+  const r = wrap.getBoundingClientRect()
+  zoomAt(r.left + r.width / 2, r.top + r.height / 2, t)
+}
+function zoomIn() { zoomAtCenter(Math.min(3, +(zoom.value + zoomStep).toFixed(2))) }
+function zoomOut() { zoomAtCenter(Math.max(0.5, +(zoom.value - zoomStep).toFixed(2))) }
+function zoomReset() { zoom.value = 1; pan.value = { x: 0, y: 0 } }
 function onWheelZoom(e: WheelEvent) {
   e.preventDefault()
-  if (e.deltaY < 0) zoomIn(); else zoomOut()
+  const target = Math.min(3, Math.max(0.5, +(zoom.value + (e.deltaY < 0 ? zoomStep : -zoomStep)).toFixed(2)))
+  zoomAt(e.clientX, e.clientY, target)
 }
 const detectEmpty = ref(false)
 const complexity = ref<ComplexityResult | null>(null)
@@ -156,6 +176,8 @@ function pickScenario(id: string) {
 watch(method, (m) => {
   selectedRegions.value.forEach(r => { r.method = m })
 })
+// 换图时复位缩放平移
+watch(() => uploadState.value.previewUrl, () => { zoom.value = 1; pan.value = { x: 0, y: 0 } })
 
 async function runDesensitize() {
   if (!canvasRef.value || selectedRegions.value.length === 0) return
@@ -229,41 +251,82 @@ function panelCoords(e: MouseEvent) {
 }
 
 function onPanelDown(e: MouseEvent) {
-  if (!drawMode.value) return
-  drawing.value = true
-  drawStart = panelCoords(e)
+  if (e.button !== 0) return
+  e.preventDefault()
+  if (drawMode.value) {
+    drawing.value = true
+    drawStart = panelCoords(e)
+    return
+  }
+  // 非画框模式：拖拽平移
+  panning.value = true
+  panStart = { x: e.clientX, y: e.clientY, panX: pan.value.x, panY: pan.value.y }
 }
 
 function onPanelMove(e: MouseEvent) {
-  if (!drawing.value || !drawStart) return
-  const cur = panelCoords(e)
-  const x0 = drawStart.x, y0 = drawStart.y, x1 = cur.x, y1 = cur.y
-  drawBox.value = {
-    x: Math.min(x0, x1),
-    y: Math.min(y0, y1),
-    w: Math.abs(x1 - x0),
-    h: Math.abs(y1 - y0),
+  if (drawing.value && drawStart) {
+    const cur = panelCoords(e)
+    const x0 = drawStart.x, y0 = drawStart.y, x1 = cur.x, y1 = cur.y
+    drawBox.value = {
+      x: Math.min(x0, x1),
+      y: Math.min(y0, y1),
+      w: Math.abs(x1 - x0),
+      h: Math.abs(y1 - y0),
+    }
+    return
+  }
+  if (panning.value && panStart) {
+    pan.value.x = panStart.panX + (e.clientX - panStart.x)
+    pan.value.y = panStart.panY + (e.clientY - panStart.y)
   }
 }
 
 function onPanelUp() {
-  if (!drawing.value) return
-  drawing.value = false
-  if (drawBox.value && drawBox.value.w > 5 && drawBox.value.h > 5) {
-    addRegion({
-      x: Math.round(drawBox.value.x),
-      y: Math.round(drawBox.value.y),
-      w: Math.round(drawBox.value.w),
-      h: Math.round(drawBox.value.h),
-    })
+  if (drawing.value) {
+    if (drawBox.value && drawBox.value.w > 5 && drawBox.value.h > 5) {
+      addRegion({
+        x: Math.round(drawBox.value.x),
+        y: Math.round(drawBox.value.y),
+        w: Math.round(drawBox.value.w),
+        h: Math.round(drawBox.value.h),
+      })
+    }
   }
+  drawing.value = false
   drawBox.value = null
   drawStart = null
+  panning.value = false
+  panStart = null
 }
+
+function onPanelLeave() {
+  // 鼠标移出面板取消进行中的拖拽，避免平移/画框卡住
+  drawing.value = false
+  drawBox.value = null
+  drawStart = null
+  panning.value = false
+  panStart = null
+}
+
+// 手动框（仅存于 selectedRegions）需要单独渲染，否则不可见。
+// 判据是「坐标近乎重合才豁免」（该条目已由 OCR 的 v-for 渲染），
+// 不能用面积重叠——大框会覆盖多个 OCR 框，否则会被误剔除而不显示。
+function rectsClose(a: Rect, b: Rect) {
+  const w = Math.abs(a.w * 0.1) + 4
+  const h = Math.abs(a.h * 0.1) + 4
+  return Math.abs(a.x - b.x) <= 4 && Math.abs(a.y - b.y) <= 4 && Math.abs(a.w - b.w) <= w && Math.abs(a.h - b.h) <= h
+}
+const manualBoxes = computed<Rect[]>(() => {
+  const ocr: Rect[] = [
+    ...textRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })),
+    ...objectRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })),
+  ]
+  return selectedRegions.value.filter(r => !ocr.some(b => rectsClose(r, b)))
+})
 
 // 删除图片：全部重置（回到上传）
 function startOver() {
-  resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'; complexity.value = null
+  resetUpload(); clearRegions(); resetDetection(); originalImage.value = ''; processedImage.value = ''; activeTab.value = 'detect'; complexity.value = null; zoomReset()
 }
 
 // 重新处理：保留当前图片，清空选区/检测，回到识别步骤（无需重新上传）
@@ -354,8 +417,11 @@ function toggleCategory(group: CategoryGroup) {
 
 /** 全选 / 全不选 */
 function toggleAll() {
+  // ⭐ 先记住目标动作再清空：clearRegions 后 allSelected 必为 false，
+  //    若先清空再判断会恒真 → "取消全选"永远失效（修复）
+  const shouldSelectAll = !allSelected.value
   clearRegions()
-  if (!allSelected.value) allRegions.value.forEach(r => addRegion(r))
+  if (shouldSelectAll) allRegions.value.forEach(r => addRegion(r))
 }
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -473,12 +539,12 @@ onUnmounted(() => { resetUpload() })
 
     <!-- 工作区 -->
     <div class="workspace" v-if="uploadState.status === 'ready'">
-      <div class="image-panel fade-in" @mousedown="onPanelDown" @mousemove="onPanelMove" @mouseup="onPanelUp" @wheel.prevent="onWheelZoom">
-        <!-- ⭐ 缩放容器：wrap 包 canvas/img/overlay，宽度按 zoom 缩放（0.5~3），框随图同步放大 -->
-        <div class="preview-wrap" :style="{ width: `calc(100% * ${zoom})`, margin: '0 auto' }">
+      <div class="image-panel fade-in" :class="{ 'draw-cursor': drawMode }" @mousedown="onPanelDown" @mousemove="onPanelMove" @mouseup="onPanelUp" @mouseleave="onPanelLeave" @wheel.prevent="onWheelZoom">
+        <!-- ⭐ 缩放容器：transform translate+scale，滚轮以光标为中心缩放，非画框拖拽平移 -->
+        <div class="preview-wrap" :style="{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }">
           <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
           <img v-show="!isProcessed" :src="uploadState.previewUrl" class="preview-image" />
-          <div v-if="!isProcessed && (textRegions.length > 0 || objectRegions.length > 0)" class="overlay">
+          <div v-if="!isProcessed" class="overlay">
           <div v-for="(region, i) in textRegions" :key="'t'+i" class="region-box"
             :class="{
               'risk-high': region.sensitive?.risk_level === 'high',
@@ -513,7 +579,20 @@ onUnmounted(() => { resetUpload() })
             top: drawBox.y / uploadState.height * 100 + '%',
             width: drawBox.w / uploadState.width * 100 + '%',
             height: drawBox.h / uploadState.height * 100 + '%',
-          }"></div>
+          }">
+            <span class="region-label">新框</span>
+          </div>
+          <!-- 手动追加框（未与 OCR 框重叠、仅存在于 selectedRegions）：单独渲染否则不可见 -->
+          <div v-for="(region, i) in manualBoxes" :key="'m'+i" class="region-box draw-box selected"
+            :style="{
+              left: region.x / uploadState.width * 100 + '%',
+              top: region.y / uploadState.height * 100 + '%',
+              width: region.w / uploadState.width * 100 + '%',
+              height: region.h / uploadState.height * 100 + '%',
+            }"
+            @click.stop="toggleRegion({ x: region.x, y: region.y, w: region.w, h: region.h })">
+            <span class="region-label">✏️ 手动</span>
+          </div>
           </div>
         </div>
         <div class="zoom-controls">
@@ -658,10 +737,12 @@ onUnmounted(() => { resetUpload() })
 .scenario-example { font-size: 11px; color: #22c55e; font-family: monospace; line-height: 1.4; }
 .scenario-desc { font-size: 11px; color: #6666aa; line-height: 1.4; }
 .workspace { display: flex; gap: 16px; margin-top: 16px; }
-.image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: auto; min-height: 300px; }
+.image-panel { flex: 1; position: relative; background: #111122; border-radius: 12px; overflow: auto; min-height: 300px; user-select: none; -webkit-user-select: none; cursor: grab; }
+.image-panel:active:not(.draw-cursor) { cursor: grabbing; }
+.image-panel.draw-cursor, .image-panel.draw-cursor * { cursor: crosshair !important; }
 .preview-canvas, .preview-image { width: 100%; display: block; }
-/* ⭐ 缩放容器：wrap 尺寸 = 图片渲染尺寸（宽度随 zoom），overlay 相对 wrap 定位（识别框与文字精确对齐） */
-.preview-wrap { position: relative; width: 100%; display: block; }
+/* ⭐ 缩放容器：transform translate+scale，原点 0 0，overlay 相对 wrap 定位（识别框与文字精确对齐） */
+.preview-wrap { position: relative; width: 100%; display: block; transform-origin: 0 0; will-change: transform; }
 .overlay { position: absolute; inset: 0; pointer-events: none; }
 .zoom-controls { position: absolute; top: 8px; left: 8px; z-index: 20; display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.65); border-radius: 8px; padding: 4px 6px; pointer-events: auto; }
 .zoom-btn { background: #2a2a4a; color: #e0e0f0; border: 1px solid #3a3a5a; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: 14px; line-height: 1; }
