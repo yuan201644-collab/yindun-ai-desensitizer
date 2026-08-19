@@ -1,7 +1,7 @@
 # 隐盾 (yindun) 开发交接文档
 
 > **用途**：新会话读取此文档即可完整接手「隐盾」项目。包含当前架构、双 Agent 工作流、版本号规范、发布政策、测试方式、踩坑记录。
-> **最后更新**：2026-08-18（1.0.0-alpha）
+> **最后更新**：2026-08-19（2.0.0）
 > **GitHub**：https://github.com/yuan201644-collab/yindun-ai-desensitizer.git
 
 ---
@@ -24,7 +24,7 @@
 
 ## 二、版本修改历史
 
-详细见 [CHANGELOG.md](CHANGELOG.md)。当前版本 **1.0.0-alpha**（初赛预发布期）。
+详细见 [CHANGELOG.md](CHANGELOG.md)。当前版本 **2.0.0**（已正式发版）。
 
 | 提交 | 内容 |
 |---|---|
