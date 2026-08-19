@@ -31,7 +31,7 @@ from app.api.routes.anti_restore import router as anti_restore_router
 app = FastAPI(
     title="「隐盾」AI 脱敏工具 API",
     description="面向大众的轻量化隐私保护工具后端服务",
-    version="1.0.0-alpha",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -93,7 +93,7 @@ async def privacy_audit_middleware(request, call_next):
 async def root():
     return {
         "name": "「隐盾」AI 个人信息智能脱敏工具",
-        "version": "1.0.0-alpha",
+        "version": "2.0.0",
         "status": "running",
         "gpu_available": _check_gpu(),
         "privacy": "端侧优先 · 内存处理 · 不落盘",

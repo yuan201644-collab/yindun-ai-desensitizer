@@ -1,6 +1,6 @@
 {
   "name": "yindun-frontend",
-  "version": "1.0.0-alpha",
+  "version": "2.0.0",
   "description": "[隐盾] AI 个人信息智能脱敏工具 - 前端",
   "type": "module",
   "scripts": {
