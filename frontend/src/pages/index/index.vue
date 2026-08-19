@@ -595,6 +595,14 @@ onUnmounted(() => { resetUpload() })
           </div>
           </div>
         </div>
+        <div class="box-legend">
+          <span class="lg"><i class="sw sel"></i>已选</span>
+          <span class="lg"><i class="sw hi"></i>高风险</span>
+          <span class="lg"><i class="sw me"></i>中风险</span>
+          <span class="lg"><i class="sw lo"></i>低风险</span>
+          <span class="lg"><i class="sw obj"></i>对象框</span>
+          <span class="lg"><i class="sw man"></i>手动框</span>
+        </div>
         <div class="zoom-controls">
           <button class="zoom-btn" @click.stop="zoomOut" :disabled="zoom <= 0.5" title="缩小">−</button>
           <span class="zoom-pct">{{ Math.round(zoom * 100) }}%</span>
@@ -751,8 +759,18 @@ onUnmounted(() => { resetUpload() })
 .region-box { position: absolute; border: 2px solid #ffcc00; background: rgba(255,204,0,0.08); border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
 .region-box.risk-high { border-color: #ff4444; background: rgba(255,68,68,0.12); }
 .region-box.risk-medium { border-color: #ffaa00; background: rgba(255,170,0,0.10); }
-.region-box.selected { border-color: #6c63ff; background: rgba(108,99,255,0.20); border-width: 3px; box-shadow: 0 0 8px rgba(108,99,255,0.4); }
+.region-box.selected { border-color: #6c63ff !important; background: rgba(108,99,255,0.22); border-width: 3px; box-shadow: 0 0 8px rgba(108,99,255,0.45); }
 .region-box.object-region { border-color: #00ccff; background: rgba(0,204,255,0.08); }
+/* 框色图例：解释未选(风险色红/橙/黄)、已选(紫)、对象框(蓝)、手动框(紫虚线) */
+.box-legend { position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px 10px; max-width: 200px; justify-content: flex-end; background: rgba(0,0,0,0.6); border-radius: 8px; padding: 5px 8px; font-size: 11px; color: #ccc; pointer-events: none; }
+.box-legend .lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.box-legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid rgba(255,255,255,0.3); }
+.box-legend .sw.sel { background: #6c63ff; border-color: #6c63ff; }
+.box-legend .sw.hi { background: #ff4444; border-color: #ff4444; }
+.box-legend .sw.me { background: #ffaa00; border-color: #ffaa00; }
+.box-legend .sw.lo { background: #ffcc00; border-color: #ffcc00; }
+.box-legend .sw.obj { background: #00ccff; border-color: #00ccff; }
+.box-legend .sw.man { background: transparent; border: 1.5px dashed #6c63ff; }
 /* 手动画框：半透明主题色 + 虚线边框（区别于已选实线框） */
 .draw-box { border-style: dashed; border-color: #6c63ff; background: rgba(108,99,255,0.25); box-shadow: none; }
 .region-label { font-size: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; display: block; }
