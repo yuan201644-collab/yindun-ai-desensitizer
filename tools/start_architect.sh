@@ -1,16 +1,17 @@
 #!/bin/bash
-# 隐盾 双终端工作流 — 终端 A：架构师 + 测试员（DeepSeek V4 Pro）
+# 隐盾 双终端工作流 — 终端 A：架构师 + 测试员
 # 职责：需求分析 / 方案设计（planning）/ 测试验收（testing）/ 版本指派
 # 用法：./tools/start_architect.sh
-# 模型可覆盖：ARCHITECT_MODEL=deepseek-v4-pro[1m] ./tools/start_architect.sh
+# 模型可覆盖（不指定则用 claude 当前默认模型，支持任意模型）：ARCHITECT_MODEL=<任意模型> ./tools/start_architect.sh
 set -e
 cd "$(dirname "$0")/.."
 
-MODEL="${ARCHITECT_MODEL:-deepseek-v4-pro[1m]}"
+# 模型名不做硬编码：ARCHITECT_MODEL 未设置时用 claude 默认模型（任何已配置模型均可跑）
+MODEL="${ARCHITECT_MODEL:-}"
 PROMPT=".agent-workflow/architect_prompt.md"
 
 echo "═══════════════════════════════════════════════"
-echo "  🛡️  架构师 + 测试员 终端（模型: $MODEL）"
+echo "  🛡️  架构师 + 测试员 终端（模型: ${MODEL:-claude 默认}）"
 echo "═══════════════════════════════════════════════"
 echo "  · 你负责 planning（写方案）和 testing（跑测试验收）"
 echo "  · 启动后 claude 自动加载角色提示词，并读 status.json 判断当前阶段"
@@ -25,4 +26,8 @@ if [ ! -f "$PROMPT" ]; then
   exit 1
 fi
 
-exec claude --model "$MODEL" "$(cat "$PROMPT")"
+if [ -n "$MODEL" ]; then
+  exec claude --model "$MODEL" "$(cat "$PROMPT")"
+else
+  exec claude "$(cat "$PROMPT")"
+fi

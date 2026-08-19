@@ -88,19 +88,19 @@ yindun/
 ### 4.1 角色分工
 | 角色 | 谁 | 职责 | 不做 |
 |---|---|---|---|
-| **架构师 = 测试端** | **终端 A（DeepSeek V4 Pro）** | 写方案 / 补测试 / 跑回归 / 版本指派 / PATCH 本地 commit | 不写业务代码 |
-| **工程师 = 开发端** | **终端 B（DeepSeek V4 Flash）** | 按方案写代码、按测试报告修 bug | 不写测试 / 不跑测试 / 不提交 / 不 bump 版本 |
+| **架构师 = 测试端** | **终端 A（任一模型）** | 写方案 / 补测试 / 跑回归 / 版本指派 / PATCH 本地 commit | 不写业务代码 |
+| **工程师 = 开发端** | **终端 B（任一模型）** | 按方案写代码、按测试报告修 bug | 不写测试 / 不跑全量测试 / 不提交 / 不 bump 版本 |
 | **推送端** | **终端 A（架构师/测试端）** | GitHub push、MINOR/MAJOR 打包（先问用户） | 版本号由用户+测试端指派 |
 
 ### 4.2 双终端模式（主推）— 真·两个终端分工
-用 CCswitch 把两个 Claude Code 终端分别转接到 DeepSeek V4 Pro / Flash：
-- **终端 A**（Pro）= 架构师+测试员，`tools/start_architect.sh` 启动
-- **终端 B**（Flash）= 工程师，`tools/start_engineer.sh` 启动
+把两个 Claude Code 终端作为独立会话，分别承担架构师/工程师角色：
+- **终端 A**（架构师+测试员）→ `tools/start_architect.sh` 启动
+- **终端 B**（工程师）→ `tools/start_engineer.sh` 启动
 
-模型路由（CCswitch 已配好，终端启动脚本自动覆盖 `--model`）：
-- `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`
-- `ANTHROPIC_MODEL=deepseek-v4-pro`（终端 A）/ `deepseek-v4-flash[1m]`（终端 B）
-- 可临时改模型：`ARCHITECT_MODEL=deepseek-v4-pro[1m] ./tools/start_architect.sh`
+**模型不写死、不限制**：启动脚本默认不传 `--model`，用 Claude 当前默认模型（任何模型都能跑）；如需指定模型，用环境变量覆盖：
+- `ARCHITECT_MODEL=<任意模型> ./tools/start_architect.sh`
+- `ENGINEER_MODEL=<任意模型> ./tools/start_engineer.sh`
+- 例如用 DeepSeek（经 CCswitch/代理转接）：`ARCHITECT_MODEL=deepseek-v4-pro ./tools/start_architect.sh`，具体模型名以你本机转接配置里可用名称为准。
 
 **交接循环（用户只负责在两头切终端）：**
 ```
@@ -118,8 +118,9 @@ planning → coding → testing → done
                 ↘ failed（超过最大迭代）
 ```
 - 人只做两件事：**开头写 task.md**、**结尾确认提交/push** + 在两头切终端
-- 双终端手动：`./tools/start_architect.sh` + `./tools/start_engineer.sh`（主推，见 4.2）
-- 单进程自动（替代方案）：`./orchestrator_auto.sh`（v2：claude -p 串行调度 + 异常恢复[status 损坏防护/断点续跑/卡住警告] + 可观测性[history.log/失败快照] + 成本控制[`--max-budget-usd`] + 热循环守卫 MAX_STALL=3）
+- 双终端手动：`./tools/start_architect.sh` + `./tools/start_engineer.sh`（**默认主推**，见 4.2）
+- 单会话直跑（**可选后备**）：主会话 Claude 一个终端即可跑完全流程（写方案→改代码→测试→汇报，代维护 status.json/test_report.md）。不需开两个终端，适合轻量任务或模型/CCswitch 未配置时。本期多数滚动任务即由主会话直跑完成
+- 单进程自动：`./orchestrator_auto.sh`（v2：claude -p 串行调度 + 异常恢复[status 损坏防护/断点续跑/卡住警告] + 可观测性[history.log/失败快照] + 成本控制[`--max-budget-usd`] + 热循环守卫 MAX_STALL=3）
 - 半自动：`./orchestrator.sh`（按提示切终端）
 
 ### 4.4 提示词
