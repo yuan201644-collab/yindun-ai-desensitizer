@@ -2,6 +2,7 @@
 [隐盾] 目标检测服务 — YOLOv8-nano 封装 (CPU)
 """
 
+import re
 import numpy as np
 from typing import Optional
 from app.core.config import DetectionConfig
@@ -72,12 +73,40 @@ class DetectionService:
         return [d for d in detections if d["label"] in sensitive_labels]
 
     @staticmethod
-    def filter_by_ocr(object_regions: list[dict], text_regions: list[dict], img_w: int, img_h: int) -> list[dict]:
-        """OCR 融合过滤：证件类对象框若几乎覆盖整图且内部大量文本行 → 误检丢弃。
+    def _has_bankcard_cardno(obj: dict, text_regions: list[dict]) -> bool:
+        """bank_card 框内是否识别到银联卡号(62 开头 ~14-19 位)。
 
-        场景：聊天/文档截图被 YOLO 误判为证件（实测 id_card conf=0.78、
-        框占图 90%、框内 14 行 OCR 文本）；真证件框面积占比小、内部文本
-        少且结构化（身份证 ~7 行、银行卡 3-4 行）。
+        ⭐ 真银行卡框内必有 62xx 卡号；误检（执照/名片/印刷品等浅色卡状物）通常
+        无卡号 → 判误检丢弃。注册号/税号等 51/91… 开头，不会误判成卡号。
+        """
+        r = obj.get("rect")
+        if not r:
+            return False
+        for t in text_regions:
+            tr = t.get("rect")
+            if not tr:
+                continue
+            inside = (
+                r["x"] <= tr["x"] + tr["w"] / 2 <= r["x"] + r["w"]
+                and r["y"] <= tr["y"] + tr["h"] / 2 <= r["y"] + r["h"]
+            )
+            if not inside:
+                continue
+            # 去空格分段再匹配（OCR 常把 6222 0212 … 断开）
+            text = "".join(t.get("text", "").split())
+            if re.search(r"62\d{12,17}", text):
+                return True
+        return False
+
+    @staticmethod
+    def filter_by_ocr(object_regions: list[dict], text_regions: list[dict], img_w: int, img_h: int) -> list[dict]:
+        """OCR 融合过滤：拦截目标检测的常见误检。
+
+        ① 证件类对象框若几乎覆盖整图且内部大量文本行 → 误检丢弃。
+           场景：聊天/文档截图被 YOLO 误判为证件（实测 id_card conf=0.78、
+           框占图 90%、框内 14 行 OCR 文本）；真证件框面积占比小、内部文本
+           少且结构化（身份证 ~7 行、银行卡 3-4 行）。
+        ② bank_card 框内无银联卡号 → 误检丢弃（治"莫名报银行卡"）。
         """
         out = []
         for obj in object_regions:
@@ -98,6 +127,11 @@ class DetectionService:
             # 真证件框通常 <50%（测试图 ~11%），不受影响
             if area_ratio > 0.6 or (area_ratio > 0.5 and inside >= 5):
                 print(f"[Detection] 过滤误检 {obj.get('label')} conf={obj.get('confidence')} 面积占比={area_ratio:.2f} 内部文本={inside}行")
+                continue
+            # ⭐ 银行卡 OCR 融合复查：真卡框内必有 62xx 卡号，无卡号判误检
+            if obj.get("label") == "bank_card" and not DetectionService._has_bankcard_cardno(obj, text_regions):
+                r0 = obj.get("rect") or {}
+                print(f"[Detection] 过滤误检 bank_card conf={obj.get('confidence')} 框内无银联卡号 rect={r0}")
                 continue
             out.append(obj)
         return out

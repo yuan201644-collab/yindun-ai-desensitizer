@@ -241,10 +241,22 @@ function exportPDF() {
       </div>
       <div class="region-details stagger" v-if="result.region_details?.length">
         <h3 class="details-title">📊 逐区域分析 ({{ result.total_regions_checked }} 处)</h3>
-        <div v-for="(detail, i) in result.region_details" :key="i" class="detail-card" :style="{ borderLeftColor: riskLevelColor(detail.risk_level) }">
-          <div class="detail-header"><span class="detail-index">区域 #{{ detail.region_index + 1 }}</span><span class="detail-risk" :style="{ color: riskLevelColor(detail.risk_level) }">{{ riskLabel(detail.risk_level) }} · {{ detail.risk_score }}分</span></div>
-          <div class="detail-metrics"><span class="metric">SSIM: {{ detail.ssim }}</span><span class="metric">PSNR: {{ detail.psnr }} dB</span><span class="metric">纹理熵: {{ detail.texture_entropy }}</span></div>
-          <span class="detail-suggestion">💡 {{ detail.suggestion }}</span>
+        <div class="region-table-wrap">
+          <table class="region-table">
+            <thead>
+              <tr><th class="rt-idx">区域</th><th>风险</th><th>SSIM</th><th>PSNR</th><th>纹理熵</th><th class="rt-sug">建议</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(detail, i) in result.region_details" :key="i">
+                <td class="rt-idx">#{{ detail.region_index + 1 }}</td>
+                <td class="rt-risk" :style="{ color: riskLevelColor(detail.risk_level) }">{{ riskLabel(detail.risk_level) }} · {{ detail.risk_score }}分</td>
+                <td class="rt-num">{{ detail.ssim }}</td>
+                <td class="rt-num">{{ detail.psnr }} dB</td>
+                <td class="rt-num">{{ detail.texture_entropy }}</td>
+                <td class="rt-sug">💡 {{ detail.suggestion }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
       <div class="adv-panel reveal" v-if="result.adversarial_summary" style="animation-delay:0.1s">
@@ -313,6 +325,17 @@ function exportPDF() {
 .radar-canvas { width: 100%; max-width: 360px; height: 280px; margin: 8px auto; display: block; }
 .suggestion { margin-top: 10px; font-size: 13px; color: #b0b0d0; line-height: 1.6; }
 .region-details { margin: 20px 0; } .details-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+  /* ⭐ 逐区域分析表格：比竖排卡片紧凑数倍，导出 PDF 更省版 */
+  .region-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #2a2a4a; }
+  .region-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .region-table th, .region-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #26263f; white-space: nowrap; }
+  .region-table th { background: #17172b; color: #6c63ff; font-weight: 600; }
+  .region-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .region-table tbody tr:hover { background: rgba(108,99,255,0.08); }
+  .region-table td.rt-idx { color: #6c63ff; font-weight: 600; }
+  .region-table td.rt-risk { font-weight: 600; }
+  .region-table td.rt-num { font-family: monospace; color: #b8b8d8; }
+  .region-table td.rt-sug { white-space: normal; min-width: 220px; max-width: 320px; color: #cfcfe8; }
 .detail-card { background: #1a1a2e; border-radius: 10px; border-left: 4px solid #3a3a5a; padding: 14px; margin: 8px 0; }
 .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .detail-index { font-weight: 600; font-size: 14px; } .detail-risk { font-size: 13px; font-weight: 600; }
@@ -364,6 +387,12 @@ function exportPDF() {
   .score-msg, .suggestion, .detail-suggestion, .adv-msg, .adv-note, .metric, .guide-item, .score-label, .adv-label, .report-meta, .report-img span { color: #333 !important; }
   .details-title, .guide-title, .detail-index, .report-title { color: #1a1a2e !important; }
   .adv-table th, .adv-table td { color: #333 !important; border-bottom-color: #e0e0ea !important; }
+  .region-table-wrap { border-color: #dde0ea !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .region-table th, .region-table td { color: #333 !important; border-bottom-color: #e0e0ea !important; }
+  .region-table th { color: #1a1a2e !important; background: #f2f3fa !important; }
+  .region-table tbody tr:nth-child(even) { background: #fafaff !important; }
+  .region-table td.rt-idx { color: #6c63ff !important; }
+  .region-table td.rt-num { color: #555 !important; }
   .score-num, .score-level, .detail-risk, .adv-region-verdict, .adv-label {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }

@@ -14,12 +14,14 @@
   图片不落盘，所有处理在内存中完成，响应后立即销毁
 """
 
+import os
 import traceback
 import time
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.ocr import router as ocr_router
 from app.core.config import OCRConfig, SecurityConfig
@@ -88,16 +90,24 @@ async def privacy_audit_middleware(request, call_next):
     return response
 
 
-# --- 根路由 ---
-@app.get("/")
-async def root():
-    return {
-        "name": "「隐盾」AI 个人信息智能脱敏工具",
-        "version": "2.0.0",
-        "status": "running",
-        "gpu_available": _check_gpu(),
-        "privacy": "端侧优先 · 内存处理 · 不落盘",
-    }
+# --- 静态挂载 / 根路由 ---
+# 便携包模式：设置 YINDUN_STATIC_DIR 指向前端构建产物，后端直接托管 SPA（同源，hash 路由无需回退）。
+# dev 模式：未设置该变量 → 保持原有 JSON 根路由，不干扰本地联调。
+# ⚠️ 静态挂载必须放在文件末尾（所有路由之后），否则会截胡 /api/* 与 /health 等显式路由。
+_STATIC_DIR = os.getenv("YINDUN_STATIC_DIR", "").strip()
+_IF_STATIC = bool(_STATIC_DIR and os.path.isdir(_STATIC_DIR))
+
+if not _IF_STATIC:
+
+    @app.get("/")
+    async def root():
+        return {
+            "name": "「隐盾」AI 个人信息智能脱敏工具",
+            "version": "2.0.0",
+            "status": "running",
+            "gpu_available": _check_gpu(),
+            "privacy": "端侧优先 · 内存处理 · 不落盘",
+        }
 
 
 @app.get("/health")
@@ -135,3 +145,8 @@ def _check_gpu() -> bool:
         return torch.cuda.is_available()
     except Exception:
         return False
+
+
+# --- 静态挂载（SPA 托管）放在文件末尾：所有显式路由 /api/*、/health 已注册，不会被子路径截胡 ---
+if _IF_STATIC:
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="frontend")

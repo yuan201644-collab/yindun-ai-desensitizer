@@ -20,6 +20,13 @@ CATEGORY_PRIORITY = {
     "location": 6,
 }
 
+# 金额单位/数字独立单元格（表格"元/仟/佰/拾"列）：即使同行相邻也保留为独立框，
+# 不并入词——否则会吞掉可单独选中的表格单元格（营业执照标签 vs 快递单金额列的判别依据）。
+MONEY_UNIT_CHARS = set("元仟佰拾万角分亿钱包币")
+FRAGMENT_MERGE_MAX_GAP = 90   # 同行相邻两框最大间隙(px)，超过视为无关框，不合并
+FRAGMENT_CENTER_BUCKET = 6    # 近似行分桶的中心Y误差(px)
+FRAGMENT_MAX_LEN = 2          # 只合并单字/短片段（>2 字的多字框本身已是词，无需并入）
+
 
 def shrink_rect_to_match(rect: dict, text: str, start: int, end: int) -> dict:
     """按字符等宽比例把整行 rect 收缩为 [start,end) 子串的像素框。
@@ -104,9 +111,101 @@ class OCRService:
                     )
             regions.append(region)
 
-        # 检测框后处理：空白误检丢弃 + 按文字实际边界收紧
+        # 检测框后处理：空白误检丢弃 + 按文字实际边界收紧 + 同行被打散的字段标签字合并回词 + 剔除水印
         regions = self._tighten_and_filter(image, regions)
+        regions = self._merge_word_fragments(regions)
+        regions = self._drop_watermark_regions(regions)
         return regions
+
+    def _drop_watermark_regions(self, regions: list[dict]) -> list[dict]:
+        """剔除水印误检：水印不是正文，不应作为可打码/可复制文本（用户实测在执照图上叠的
+        "添加水印…"被 PaddleOCR 当正文抓到）。规则保守、零误伤：
+        - 文本显式含「水印」字样 → 删（测试水印/演示水印）
+        - 真正半透明公司名平铺水印（无"水印"二字）暂不在此处理——颜色/对比度过滤需在图通道
+          做，属后续增强；此处先保证不要把"水印"字样当正文。
+        """
+        out = []
+        for r in regions:
+            t = "".join((r.get("text") or "").split())
+            if "水印" in t:
+                print(f"[OCR] 剔除水印误检: {r.get('text')!r}")
+                continue
+            out.append(r)
+        return out
+
+    def _merge_word_fragments(self, regions: list[dict]) -> list[dict]:
+        """把同一行上被打散的字段标签字（如营业执照"注册资本"→ 注/资/本）合并回词语框。
+
+        只合并"非敏感"的短片段（len≤2 字）：敏感值保持独立，便于用户单独框选打码；
+        合并后整串为金额单位词/纯数字时放弃（快递单"元/仟/佰/拾"列必须保留为独立单元格）。
+        """
+        if not regions:
+            return regions
+
+        # 1) 按中心Y分桶成"近似行"（同一视觉行的字才可能合并）
+        buckets: list[list[dict]] = []
+        for r in sorted(regions, key=lambda r: (r["rect"]["y"], r["rect"]["x"])):
+            cy = r["rect"]["y"] + r["rect"]["h"] / 2
+            placed = False
+            for b in buckets:
+                bcy = sum(i["rect"]["y"] + i["rect"]["h"] / 2 for i in b) / len(b)
+                if abs(cy - bcy) <= FRAGMENT_CENTER_BUCKET:
+                    b.append(r)
+                    placed = True
+                    break
+            if not placed:
+                buckets.append([r])
+
+        def can_link(a: dict, b: dict) -> bool:
+            ax, _, aw, _ = a["rect"]["x"], a["rect"]["y"], a["rect"]["w"], a["rect"]["h"]
+            bx, _, _, _ = b["rect"]["x"], b["rect"]["y"], b["rect"]["w"], b["rect"]["h"]
+            gap = bx - (ax + aw)
+            if gap < 0 or gap > FRAGMENT_MERGE_MAX_GAP:
+                return False
+            if len(a.get("text", "")) > FRAGMENT_MAX_LEN or len(b.get("text", "")) > FRAGMENT_MAX_LEN:
+                return False
+            if a.get("sensitive") is not None or b.get("sensitive") is not None:
+                return False
+            return True
+
+        merged_boxes: list[dict] = []
+        used: set[int] = set()
+
+        def emit(cur: list[dict]):
+            text = "".join(r["text"] for r in cur)
+            if set(text) <= MONEY_UNIT_CHARS or text.replace(".", "").isdigit():
+                return  # 金额单位词 / 纯数字 → 保留独立单元格
+            x0 = min(r["rect"]["x"] for r in cur)
+            y0 = min(r["rect"]["y"] for r in cur)
+            x1 = max(r["rect"]["x"] + r["rect"]["w"] for r in cur)
+            y1 = max(r["rect"]["y"] + r["rect"]["h"] for r in cur)
+            merged_boxes.append({
+                "bbox": [[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
+                "rect": {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0},
+                "text": text,
+                "confidence": max(r.get("confidence", 0.0) for r in cur),
+                "sensitive": None,
+            })
+            for r in cur:
+                used.add(id(r))
+
+        # 2) 桶内按 x 贪心链接水平 run，run≥2 时合并
+        for b in buckets:
+            items = sorted(b, key=lambda r: r["rect"]["x"])
+            cur = [items[0]] if items else []
+            for r in items[1:]:
+                if can_link(cur[-1], r):
+                    cur.append(r)
+                else:
+                    if len(cur) >= 2:
+                        emit(cur)
+                    cur = [r]
+            if len(cur) >= 2:
+                emit(cur)
+
+        # 3) 输出 = 未并入框 + 新增合并框，按 (y,x) 恢复阅读顺序
+        kept = [r for r in regions if id(r) not in used]
+        return sorted(kept + merged_boxes, key=lambda r: (r["rect"]["y"], r["rect"]["x"]))
 
     def _tighten_and_filter(self, image: np.ndarray, regions: list[dict]) -> list[dict]:
         """检测框贴合文字：低置信度丢弃、空白背景误检丢弃、框向内收紧到文字边界（留 1px 边距）。"""

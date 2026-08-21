@@ -38,6 +38,10 @@ Thumbs.db
 # Vite
 frontend/dist/
 
+# 便携分发包（含嵌入式 Python + 模型 + 构建产物，体积大，不入库）
+portable/
+*.zip
+
 # Test caches
 .pytest_cache/
 frontend/tests/coverage/

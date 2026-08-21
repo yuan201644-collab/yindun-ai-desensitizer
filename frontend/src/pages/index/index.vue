@@ -96,6 +96,85 @@ function applyFile(file: File) {
   assessComplexity(file).then(c => { complexity.value = c }).catch(() => { complexity.value = null })
 }
 
+// ⭐ 识别全文：把多行 OCR 结果按阅读顺序（y→x）拼成整段，供一键复制。
+//   同一行的多个字体块用空格连接，不同行换行（阈值按行高自适应，避免跨行误连）。
+const fullText = computed(() => {
+  // 按中心 Y 分桶成"近似行"，桶内按 X 排序（标签在左、值在右），桶间换行＝整段可复制文本
+  const items = textRegions.value
+    .map(r => ({ x: r.rect.x, h: r.rect.h, cy: r.rect.y + r.rect.h / 2, t: ((r.text || '') as string).trim() }))
+    .filter(r => r.t)
+    .sort((a, b) => (a.cy - b.cy) || (a.x - b.x))
+  const buckets: typeof items[] = []
+  for (const it of items) {
+    const last = buckets[buckets.length - 1]
+    if (last && Math.abs(it.cy - last.reduce((s, x) => s + x.cy, 0) / last.length) <= 12) last.push(it)
+    else buckets.push([it])
+  }
+  return buckets
+    .map(b => b.sort((a, b) => a.x - b.x).map(x => x.t).join(' '))
+    .join('\n')
+})
+
+/** 📋 复制识别全文到剪贴板 */
+async function copyFullText() {
+  try {
+    await navigator.clipboard.writeText(fullText.value)
+    alert('已复制识别全文')
+  } catch {
+    alert('复制失败：浏览器未授予剪贴板权限，请手动全选复制')
+  }
+}
+
+// ⭐ 段落聚合：把竖直相邻、x 区间重叠的多行识别成"一整段"，图片上可整段全选打码。
+//   段内行间距 ≤ PARAGRAPH_GAP 且两行 x 有重叠才算同段（多栏文字不同 x 不会误并）。
+const PARAGRAPH_GAP = 14
+interface Paragraph { rect: Rect; rects: Rect[]; texts: string[]; sensitiveRects: Rect[] }
+const paragraphs = computed<Paragraph[]>(() => {
+  const rows = textRegions.value
+    .map(r => ({ rect: r.rect as Rect, sensitive: (r as any).sensitive != null, text: ((r as any).text || '').trim() }))
+    .slice()
+    .sort((a, b) => a.rect.y - b.rect.y)
+  const paras: Paragraph[] = []
+  for (const r of rows) {
+    const last = paras[paras.length - 1]
+    if (last) {
+      const lr = last.rect
+      const gap = r.rect.y - (lr.y + lr.h)
+      const xOverlap = r.rect.x < lr.x + lr.w && r.rect.x + r.rect.w > lr.x
+      if (gap >= 0 && gap <= PARAGRAPH_GAP && xOverlap) {
+        last.rects.push(r.rect)
+        last.texts.push(r.text)
+        if (r.sensitive) last.sensitiveRects.push(r.rect)
+        last.rect = {
+          x: Math.min(last.rect.x, r.rect.x),
+          y: last.rect.y,
+          w: Math.max(last.rect.x + last.rect.w, r.rect.x + r.rect.w) - Math.min(last.rect.x, r.rect.x),
+          h: r.rect.y + r.rect.h - last.rect.y,
+        }
+        continue
+      }
+    }
+    paras.push({ rect: { ...r.rect }, rects: [r.rect], texts: r.text ? [r.text] : [], sensitiveRects: r.sensitive ? [r.rect] : [] })
+  }
+  return paras
+})
+/** 多行段（≥2 行）才是可整选的段；单行段保持逐行点选 */
+const multiLineParagraphs = computed(() => paragraphs.value.filter(p => p.rects.length >= 2))
+/** 诊断：确认段落是否真聚合出来了（用户反馈"看不到段框"时用控制台核对） */
+watch(multiLineParagraphs, ps => console.log('[段落] 共', paragraphs.value.length, '段（多行', ps.length, '段）：', ps.map(p => p.rects.length + '行')))
+
+/** 点一段整选：把段内敏感行全部加入打码选区（已全选则整段取消）。只选敏感内容，不打标签。 */
+function toggleParagraph(p: Paragraph) {
+  const rects = p.sensitiveRects.length ? p.sensitiveRects : p.rects
+  if (!rects.length) return
+  const all = rects.every(r => isRegionSelected(r))
+  if (all) {
+    selectedRegions.value = selectedRegions.value.filter(r => !rects.some(rr => r.x === rr.x && r.y === rr.y && r.w === rr.w && r.h === rr.h))
+  } else {
+    rects.forEach(r => addRegion(r))
+  }
+}
+
 function onFileSelected(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files?.[0]) applyFile(target.files[0])
@@ -545,6 +624,19 @@ onUnmounted(() => { resetUpload() })
           <canvas v-show="isProcessed" ref="canvasRef" class="preview-canvas" />
           <img v-show="!isProcessed" :src="uploadState.previewUrl" class="preview-image" />
           <div v-if="!isProcessed" class="overlay">
+          <!-- ⭐ 段落整选框：一段多行文字合成虚线框，点一下整段全选打码。z 高于单行框 → 点段内任意文字=整段。 -->
+          <div v-for="(p, pi) in multiLineParagraphs" :key="'p'+pi"
+            class="paragraph-box"
+            :class="{ 'paragraph-selected': p.sensitiveRects.length && p.sensitiveRects.every(rr => isRegionSelected(rr)) }"
+            :style="{
+              left: (p.rect.x / uploadState.width * 100) + '%',
+              top: (p.rect.y / uploadState.height * 100) + '%',
+              width: (p.rect.w / uploadState.width * 100) + '%',
+              height: (p.rect.h / uploadState.height * 100) + '%',
+            }"
+            @click.stop="toggleParagraph(p)">
+            <span class="paragraph-label" :title="'整段 ' + p.rects.length + ' 行，点击整段全选并打码'">整段 · {{ p.rects.length }} 行</span>
+          </div>
           <div v-for="(region, i) in textRegions" :key="'t'+i" class="region-box"
             :class="{
               'risk-high': region.sensitive?.risk_level === 'high',
@@ -636,6 +728,24 @@ onUnmounted(() => { resetUpload() })
 
         <div v-if="(textRegions.length > 0 || objectRegions.length > 0) && !isProcessed" class="regions-list">
           <p class="panel-title">检测到 {{ textRegions.length }} 处文本<span v-if="objectRegions.length"> + {{ objectRegions.length }} 个目标</span></p>
+          <div class="fulltext-card" v-if="fullText">
+            <div class="fulltext-head">
+              <span class="section-title fulltext-title">📄 识别全文（{{ fullText.replace(/\s+/g, '').length }} 字）</span>
+              <button class="btn-copyfull" @click="copyFullText">📋 复制全部文字</button>
+            </div>
+            <pre class="fulltext-body">{{ fullText }}</pre>
+          </div>
+          <div v-if="multiLineParagraphs.length" class="paragraph-list">
+            <p class="section-title">📖 多行段落（点整段一起打码）</p>
+            <div v-for="(p, pi) in multiLineParagraphs" :key="'pl'+pi" class="paragraph-item"
+              :class="{ on: p.sensitiveRects.length && p.sensitiveRects.every(rr => isRegionSelected(rr)) }">
+              <span class="pi-rows">{{ p.rects.length }}行</span>
+              <span class="pi-text" :title="p.texts.join('\n')">{{ p.texts.join(' ') }}</span>
+              <button class="pi-btn" @click="toggleParagraph(p)">
+                {{ (p.sensitiveRects.length && p.sensitiveRects.every(rr => isRegionSelected(rr))) ? '✖ 取消整段' : '✅ 整段打码' }}
+              </button>
+            </div>
+          </div>
           <div class="draw-control">
             <button class="btn btn-draw" :class="{ active: drawMode }" @click="drawMode = !drawMode">
               {{ drawMode ? '画框中：拖拽画新框' : '✏️ 手动画框' }}
@@ -756,7 +866,24 @@ onUnmounted(() => { resetUpload() })
 .zoom-btn { background: #2a2a4a; color: #e0e0f0; border: 1px solid #3a3a5a; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; font-size: 14px; line-height: 1; }
 .zoom-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .zoom-pct { color: #aaaacc; font-size: 12px; min-width: 40px; text-align: center; }
-.region-box { position: absolute; border: 2px solid #ffcc00; background: rgba(255,204,0,0.08); border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
+/* ⭐ 段落整选框：把一段多行文字合成一个框，点一下整段全选打码。
+      z-index 高于单行框 → 点段落文字区域=整段全选（主需求）；单行框仍在段框下方渲染可见。
+      hover/focus 明显高亮+角标说明，避免用户看不出"这是可整选的段"。 */
+    .paragraph-box { position: absolute; z-index: 2; border: 2px dashed #6c63ff; background: rgba(108,99,255,0.08); border-radius: 6px; cursor: pointer; pointer-events: auto; transition: all 0.12s; }
+    .paragraph-box:hover, .paragraph-box:focus { background: rgba(108,99,255,0.18); border: 2px solid #6c63ff; box-shadow: 0 0 0 2px rgba(108,99,255,0.35); }
+    .paragraph-selected { border-color: #22c55e !important; border-style: solid !important; background: rgba(34,197,94,0.22); }
+    .paragraph-label { position: absolute; top: -18px; left: 0; font-size: 11px; font-weight: 600; color: #0b0b20; background: #b8b2ff; padding: 1px 7px; border-radius: 4px; white-space: nowrap; line-height: 1.6; pointer-events: none; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+    .paragraph-selected .paragraph-label { background: #22c55e; color: #fff; }
+    .region-box { position: absolute; z-index: 1; border: 2px solid #ffcc00; background: rgba(255,204,0,0.08); border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
+    /* 📖 多行段落列表：每段一行，带预览 + 整段打码按钮（图上虚框之外的列表入口） */
+    .paragraph-list { margin-top: 10px; padding: 10px 12px; background: rgba(108,99,255,0.07); border: 1px solid rgba(108,99,255,0.25); border-radius: 10px; }
+    .paragraph-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,0.04); margin-top: 6px; }
+    .paragraph-item.on { background: rgba(34,197,94,0.14); }
+    .pi-rows { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: #b8b2ff; background: rgba(18,18,40,0.8); padding: 3px 7px; border-radius: 6px; }
+    .paragraph-item.on .pi-rows { color: #a7f3c9; }
+    .pi-text { flex: 1 1 auto; font-size: 12px; color: #d0d0ea; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pi-btn { flex: 0 0 auto; font-size: 12px; font-weight: 600; padding: 4px 10px; border: none; border-radius: 6px; cursor: pointer; background: #6c63ff; color: #fff; }
+    .paragraph-item.on .pi-btn { background: #22c55e; }
 .region-box.risk-high { border-color: #ff4444; background: rgba(255,68,68,0.12); }
 .region-box.risk-medium { border-color: #ffaa00; background: rgba(255,170,0,0.10); }
 .region-box.selected { border-color: #6c63ff !important; background: rgba(108,99,255,0.22); border-width: 3px; box-shadow: 0 0 8px rgba(108,99,255,0.45); }
@@ -792,6 +919,14 @@ onUnmounted(() => { resetUpload() })
 .btn-small { flex: 1; padding: 8px 0; font-size: 13px; margin: 0; }
 .btn-danger { background: #3a1a1a; color: #ff6b6b; }
 .btn-danger:hover { background: #4a2020; }
+/* 识别全文卡片：多行 OCR 拼成整段，一键复制 */
+.fulltext-card { background: #12122a; border: 1px solid #2a2a4a; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.fulltext-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.fulltext-title { margin: 0; }
+.btn-copyfull { flex-shrink: 0; background: #6c63ff; color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.btn-copyfull:hover { background: #5a52e0; }
+.btn-copyfull:disabled { opacity: 0.45; cursor: not-allowed; }
+.fulltext-body { margin: 0; max-height: 120px; overflow: auto; background: #0d0d1a; border: 1px solid #26263f; border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.6; color: #c0c0e0; white-space: pre-wrap; word-break: break-word; }
 /* 手动画框切换按钮 */
 .draw-control { margin-bottom: 10px; }
 .btn-draw { background: #2a2a4a; color: #c0c0e0; border: 1px solid #3a3a5a; margin: 0; }

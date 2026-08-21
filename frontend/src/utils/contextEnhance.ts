@@ -70,6 +70,92 @@ const CAPTURE_RULES: CaptureRule[] = [
   },
 ]
 
+/**
+ * ================================================================
+ * 裸名 + 联系方式共现识别（「张三 电话138…」· 聊天场景）
+ * ================================================================
+ * 聊天记录里的姓名几乎都是裸出现（无「姓名：」前缀），纯正则/前缀标签捕不到。
+ * 这里用一个强启发：名字与联系方式词/号码在同一邻窗口内出现，且名字首字是
+ * 常见姓氏 —— 双约束压误报。「我们公司电话…」「今天张三…」这类不会被误当姓名。
+ */
+
+/** 常见单姓（用于裸名识别的首字强约束） */
+const SURNAMES_SINGLE = new Set(
+  '王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗梁宋郑谢韩唐冯于董萧程曹袁邓许傅沈曾彭吕苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏钟汪田任姜范方石姚谭廖邹熊金陆郝孔白崔康毛邱秦江史顾侯邵孟龙万段钱汤尹黎易常武乔贺赖龚文'.split('')
+)
+/** 常见复姓 */
+const SURNAMES_DOUBLE = ['欧阳', '司马', '上官', '诸葛', '东方', '夏侯', '皇甫', '尉迟', '公孙', '慕容', '司徒', '司空', '澹台', '端木', '令狐', '南宫']
+/** 姓名尾缀/虚词（「张三的号码」剔除「的」；「老先生电话」剔除「先生」） */
+const NAME_TAIL_GARBAGE = new Set(['的', '是', '叫', '了', '在', '给', '也', '还', '都', '被', '把', '就'])
+const NAME_TAIL_DOUBLE = new Set(['先生', '女士', '老师', '同学', '老板', '同事', '朋友', '经理'])
+/** 联系方式指示词（裸名的锚点：名字紧跟其后/其附近出现） */
+const CONTACT_INDICATOR = /联系电话|手机号码|手机号|手机|联系方式|联系|电话|号码|拨打|call|tel/g
+
+function isNameLike(name: string): boolean {
+  if (name.length < 2 || name.length > 5) return false
+  if (SURNAMES_SINGLE.has(name[0])) return true
+  return SURNAMES_DOUBLE.some((s) => name.startsWith(s))
+}
+
+/** 中文/间隔符 */
+function isHan(ch: string): boolean {
+  const c = ch.codePointAt(0)!
+  return (c >= 0x4e00 && c <= 0x9fa5) || ch === '·'
+}
+/** 空白或标点（名字与联系方式词之间允许夹这些「非语义字符」，但夹别的字则说明结构不对） */
+const SPACE_OR_PUNCT = /[\s，。、；：！？""''（）…\-.，·]/
+
+/**
+ * 在主文本上捕捉「裸名 + 联系方式共现」的姓名 span。
+ * @param text 原文
+ * @param spans 已识别的 span（含 contact 类，也作为锚点）
+ */
+export function captureCooccurName(text: string, spans: SpanLike[]): SpanLike[] {
+  const out = spans.map((s) => ({ ...s }))
+  // 锚点1：联系方式指示词出现位置
+  CONTACT_INDICATOR.lastIndex = 0
+  const points: number[] = []
+  let m: RegExpExecArray | null
+  while ((m = CONTACT_INDICATOR.exec(text)) !== null) points.push(m.index)
+  // 锚点2：已识别的联系方式 span（手机号/固话 …）
+  for (const s of spans) if (s.category === 'contact') points.push(s.start)
+
+  const WINDOW = 18 // 名字最多在指示词前这么远
+  for (const P of points) {
+    const win = Math.max(0, P - WINDOW)
+    // 1) 从 P 往前剥掉名字后的「非语义字符」（空格/标点）
+    let j = P
+    while (j > win && j > 0 && SPACE_OR_PUNCT.test(text[j - 1])) j--
+    // 2) 再剥名字尾部的虚词/称谓（「张三的」→「张三」）
+    while (j > win && j > 0) {
+      const two = text.slice(j - 2, j)
+      const c2 = two.length === 2 && NAME_TAIL_DOUBLE.has(two)
+      const c1 = NAME_TAIL_GARBAGE.has(text[j - 1])
+      if (!c1 && !c2) break
+      j -= (c2 ? 2 : 1)
+    }
+    // 3) 取紧邻往前的连续汉字块作为候选名
+    let k = j
+    while (k > win && isHan(text[k - 1])) k--
+    const block = text.slice(k, j)
+    if (!isNameLike(block)) continue
+    const start = k
+    const end = j
+    if (out.some((s) => overlaps(s.start, s.end, start, end))) continue
+    out.push({
+      start,
+      end,
+      type: '姓名',
+      category: 'social',
+      riskLevel: 'high',
+      matchText: block,
+      maskChar: '█',
+      contextConfirmed: true,
+    })
+  }
+  return out.sort((a, b) => a.start - b.start)
+}
+
 const RISK_ORDER: RiskLevel[] = ['low', 'medium', 'high']
 
 function upgradeRisk(r: RiskLevel): RiskLevel {
@@ -127,5 +213,6 @@ export function enhanceContext(text: string, spans: SpanLike[], windowSize = 20)
     }
   }
 
-  return out.sort((a, b) => a.start - b.start)
+  // 3) 上下文捕裸名：姓名 + 联系方式共现（聊天场景「张三 电话138…」）
+  return captureCooccurName(text, out)
 }
