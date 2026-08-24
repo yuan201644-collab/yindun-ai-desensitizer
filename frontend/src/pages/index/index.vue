@@ -126,8 +126,10 @@ async function copyFullText() {
 }
 
 // ⭐ 段落聚合：把竖直相邻、x 区间重叠的多行识别成"一整段"，图片上可整段全选打码。
-//   段内行间距 ≤ PARAGRAPH_GAP 且两行 x 有重叠才算同段（多栏文字不同 x 不会误并）。
-const PARAGRAPH_GAP = 14
+//   行距动态阈值 = 行高×PARAGRAPH_GAP_RATIO（下限 14px），兼容营业执照经营范围这类
+//   字号低、行距松的多行段落；两行 x 有重叠才同段（多栏文字不同 x 不会误并）。
+const PARAGRAPH_GAP_RATIO = 1.5
+const PARAGRAPH_MIN_GAP = 14
 interface Paragraph { rect: Rect; rects: Rect[]; sensitiveRects: Rect[] }
 const paragraphs = computed<Paragraph[]>(() => {
   const rows = textRegions.value
@@ -140,8 +142,9 @@ const paragraphs = computed<Paragraph[]>(() => {
     if (last) {
       const lr = last.rect
       const gap = r.rect.y - (lr.y + lr.h)
+      const gapLimit = Math.max(PARAGRAPH_MIN_GAP, Math.round((lr.h || 20) * PARAGRAPH_GAP_RATIO))
       const xOverlap = r.rect.x < lr.x + lr.w && r.rect.x + r.rect.w > lr.x
-      if (gap >= 0 && gap <= PARAGRAPH_GAP && xOverlap) {
+      if (gap >= -1 && gap <= gapLimit && xOverlap) {
         last.rects.push(r.rect)
         if (r.sensitive) last.sensitiveRects.push(r.rect)
         last.rect = {
@@ -157,14 +160,19 @@ const paragraphs = computed<Paragraph[]>(() => {
   }
   return paras
 })
+// 诊断辅助：硬刷新后看控制台，确认有多少行并成了整段
+watch(paragraphs, ps => {
+  const multi = ps.filter(p => p.rects.length >= 2)
+  console.log(`[段落] 共 ${ps.length} 行组、多行段 ${multi.length} 个 →`, multi.map(p => p.rects.length + '行'))
+})
 
-/** 点一段整选：把段内敏感行全部加入打码选区（已全选则整段取消）。只选敏感内容，不打标签。 */
+/** 点一段整选：把这一段的所有行全部加入打码选区（已全选则整段取消）。 */
 function toggleParagraph(p: Paragraph) {
-  const rects = p.sensitiveRects.length ? p.sensitiveRects : p.rects
+  const rects = p.rects
   if (!rects.length) return
   const all = rects.every(r => isRegionSelected(r))
   if (all) {
-    selectedRegions.value = selectedRegions.value.filter(r => !rects.some(rr => r.x === rr.x && r.y === rr.y && r.w === rr.w && r.h === rr.h))
+    selectedRegions.value = selectedRegions.value.filter(r => !rects.some(rr => r.x === rr.x && r.y === rr.y))
   } else {
     rects.forEach(r => addRegion(r))
   }
@@ -279,6 +287,12 @@ function toggleRegion(region: {x:number,y:number,w:number,h:number}) {
   const idx = selectedRegions.value.findIndex(r => r.x === region.x && r.y === region.y)
   idx >= 0 ? removeRegion(idx) : addRegion(region)
 }
+
+// ---------- 右侧"点选文字"打码 ----------
+// 勾选右侧一条文字 = 把对应框加入打码选区（左侧同步变紫）；hover 在图中定位闪烁。
+const hoverTextIdx = ref(-1)
+/** 右侧已点选的文字条数（含图内任何已选框） */
+const checkedTextCount = computed(() => selectedRegions.value.length)
 
 function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolean {
   return selectedRegions.value.some(r => r.x === region.x && r.y === region.y)
@@ -622,7 +636,7 @@ onUnmounted(() => { resetUpload() })
           <!-- ⭐ 段落整选框：一段多行文字合成一个虚线框，点一下整段全选打码。显示在单行框下层。 -->
           <div v-for="(p, pi) in paragraphs.filter(p => p.rects.length >= 2)" :key="'p'+pi"
             class="paragraph-box"
-            :class="{ 'paragraph-selected': p.sensitiveRects.length && p.sensitiveRects.every(rr => isRegionSelected(rr)) }"
+            :class="{ 'paragraph-selected': p.rects.length && p.rects.every(rr => isRegionSelected(rr)) }"
             :style="{
               left: (p.rect.x / uploadState.width * 100) + '%',
               top: (p.rect.y / uploadState.height * 100) + '%',
@@ -630,7 +644,7 @@ onUnmounted(() => { resetUpload() })
               height: (p.rect.h / uploadState.height * 100) + '%',
             }"
             @click.stop="toggleParagraph(p)">
-            <span class="paragraph-label" :title="'整段 ' + p.rects.length + ' 行，点击整段全选并打码'">{{ p.sensitiveRects.length }}/{{ p.rects.length }} 敏感 · 整段</span>
+            <span class="paragraph-label" :title="'整段 ' + p.rects.length + ' 行，点击整段全选并打码'">整段 · {{ p.rects.length }} 行</span>
           </div>
           <div v-for="(region, i) in textRegions" :key="'t'+i" class="region-box"
             :class="{
@@ -639,6 +653,7 @@ onUnmounted(() => { resetUpload() })
               'risk-low': region.sensitive?.risk_level === 'low',
               selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}),
               'region-selected-anim': isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}),
+              'hover-locate': i === hoverTextIdx,
             }"
             :style="{
               left: (region.rect.x / uploadState.width * 100) + '%',
@@ -647,7 +662,7 @@ onUnmounted(() => { resetUpload() })
               height: (region.rect.h / uploadState.height * 100) + '%',
             }"
             @click.stop="handleRegionClick($event, {x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})">
-            <span class="region-label" :title="region.sensitive?.object_label || region.sensitive?.type || region.text">{{ region.sensitive?.object_label || region.sensitive?.type || region.text }}</span>
+            <span class="region-label region-no" :title="(region.sensitive?.object_label || region.sensitive?.type || '') + '：' + region.text">#{{ i }}</span>
           </div>
           <div v-for="(region, i) in objectRegions" :key="'o'+i" class="region-box object-region"
             :class="{ selected: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}), 'region-selected-anim': isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}) }"
@@ -729,6 +744,28 @@ onUnmounted(() => { resetUpload() })
               <button class="btn-copyfull" @click="copyFullText">📋 复制全部文字</button>
             </div>
             <pre class="fulltext-body">{{ fullText }}</pre>
+          </div>
+          <!-- ⭐ 点选文字打码：勾选右侧一条 → 图中对应框标紫，点"打码选中"统一打码；hover 定位 -->
+          <div class="text-pick-card" v-if="textRegions.length">
+            <div class="text-pick-head">
+              <span class="section-title">🔤 点选文字打码</span>
+              <span class="text-pick-count">{{ checkedTextCount }} 已选</span>
+            </div>
+            <div class="text-pick-list">
+              <div v-for="(region, i) in textRegions" :key="'pick'+i" class="text-pick-row"
+                :class="{ picked: isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h}) }"
+                :title="region.text"
+                @mouseenter="hoverTextIdx = i" @mouseleave="hoverTextIdx = -1">
+                <input type="checkbox" class="text-pick-check"
+                  :checked="isRegionSelected({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})"
+                  @click.stop="toggleRegion({x: region.rect.x, y: region.rect.y, w: region.rect.w, h: region.rect.h})" />
+                <span class="text-pick-no">#{{ i }}</span>
+                <span class="text-pick-txt">{{ region.text }}</span>
+                <span v-if="region.sensitive" class="text-pick-tag"
+                  :class="'risk-' + (region.sensitive.risk_level || 'low')">{{ region.sensitive.object_label || region.sensitive.type }}</span>
+              </div>
+            </div>
+            <button class="btn btn-maskpick" :disabled="selectedRegions.length === 0" @click="runDesensitize">✔ 打码选中（{{ selectedRegions.length }}）</button>
           </div>
           <div class="draw-control">
             <button class="btn btn-draw" :class="{ active: drawMode }" @click="drawMode = !drawMode">
@@ -851,7 +888,7 @@ onUnmounted(() => { resetUpload() })
 .zoom-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .zoom-pct { color: #aaaacc; font-size: 12px; min-width: 40px; text-align: center; }
 /* ⭐ 段落整选框：把一段多行文字合成虚线框，点击整段全选打码（在下层，不遮挡单行框） */
-    .paragraph-box { position: absolute; border: 1.5px dashed rgba(108,99,255,0.6); background: rgba(108,99,255,0.06); border-radius: 6px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
+    .paragraph-box { position: absolute; border: 2px dashed rgba(108,99,255,0.85); background: rgba(108,99,255,0.06); border-radius: 6px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
     .paragraph-box:hover { background: rgba(108,99,255,0.14); border-color: #6c63ff; }
     .paragraph-selected { border-color: #22c55e !important; background: rgba(34,197,94,0.15); }
     .paragraph-label { position: absolute; top: -16px; left: 0; font-size: 10px; color: #cfcaff; background: rgba(18,18,40,0.94); padding: 1px 5px; border-radius: 3px; white-space: nowrap; line-height: 1.5; pointer-events: none; }
@@ -873,6 +910,29 @@ onUnmounted(() => { resetUpload() })
 /* 手动画框：半透明主题色 + 虚线边框（区别于已选实线框） */
 .draw-box { border-style: dashed; border-color: #6c63ff; background: rgba(108,99,255,0.25); box-shadow: none; }
 .region-label { font-size: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; display: block; }
+/* 图中文字框编号徽章：仅显示 #i，昵称移入 title 悬浮提示，避免遮挡图片 */
+.region-no { min-width: 20px; text-align: center; font-weight: 700; background: rgba(20,20,46,0.85); border: 1px solid rgba(108,99,255,0.4); }
+/* 右侧"点选文字打码"：逐条可勾选，hover 图中定位，底部统一打码 */
+.text-pick-card { margin-top: 10px; }
+.text-pick-head { display: flex; align-items: center; justify-content: space-between; }
+.text-pick-count { font-size: 11px; color: #8888bb; }
+.text-pick-list { max-height: 220px; overflow-y: auto; border: 1px solid #2a2a4a; border-radius: 8px; margin-top: 6px; background: #141428; }
+.text-pick-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 12px; color: #c9c9e8; cursor: pointer; border-bottom: 1px solid #1e1e38; transition: background 0.12s; }
+.text-pick-row:last-child { border-bottom: none; }
+.text-pick-row:hover { background: rgba(108,99,255,0.14); }
+.text-pick-row.picked { background: rgba(108,99,255,0.22); color: #fff; }
+.text-pick-check { accent-color: #6c63ff; flex-shrink: 0; }
+.text-pick-no { flex-shrink: 0; font-size: 10px; font-weight: 700; color: #cfcaff; background: rgba(108,99,255,0.16); border: 1px solid rgba(108,99,255,0.35); border-radius: 4px; padding: 0 4px; min-width: 18px; text-align: center; }
+.text-pick-txt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.text-pick-tag { flex-shrink: 0; font-size: 10px; color: #fff; padding: 1px 5px; border-radius: 3px; }
+.text-pick-tag.risk-high { background: #ff4444; }
+.text-pick-tag.risk-medium { background: #ffaa00; color: #221; }
+.text-pick-tag.risk-low { background: #ffcc00; color: #221; }
+.btn-maskpick { width: 100%; margin-top: 8px; background: linear-gradient(135deg, #6c63ff, #8b7cff); border: none; color: #fff; border-radius: 8px; padding: 8px 0; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+.btn-maskpick:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-maskpick:disabled { opacity: 0.4; cursor: not-allowed; }
+/* hover 定位：右侧悬停某条时，图中对应框亮起粗白虚线高亮 */
+.region-box.hover-locate { border-color: #ffffff !important; border-width: 3px; box-shadow: 0 0 12px rgba(255,255,255,0.8); z-index: 15; }
 .control-panel { width: 280px; flex-shrink: 0; background: #1a1a2e; border-radius: 12px; padding: 16px; }
 .panel-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 .section-title { font-size: 13px; font-weight: 600; color: #aaaacc; margin: 12px 0 6px; }
