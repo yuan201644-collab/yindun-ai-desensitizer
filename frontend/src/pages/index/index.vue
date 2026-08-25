@@ -128,12 +128,19 @@ async function copyFullText() {
 // ⭐ 段落聚合：把竖直相邻、x 区间重叠的多行识别成"一整段"，图片上可整段全选打码。
 //   行距动态阈值 = 行高×PARAGRAPH_GAP_RATIO（下限 14px），兼容营业执照经营范围这类
 //   字号低、行距松的多行段落；两行 x 有重叠才同段（多栏文字不同 x 不会误并）。
-const PARAGRAPH_GAP_RATIO = 1.5
-const PARAGRAPH_MIN_GAP = 14
+const PARAGRAPH_GAP_RATIO = 1.0   // 行距 ≤ 行高即视为相邻
+const PARAGRAPH_MIN_GAP = 12
+const PARAGRAPH_X_COVER = 0.5     // x 重叠须 ≥ 较窄行宽的 50%
+const PARAGRAPH_X_ALIGN = 0.08    // 左边界对齐：x 起点差 ≤ 较窄行宽 8%（拆营业执照"标签列/内容列"左右两列误并）
+const PARAGRAPH_H_RATIO = 0.45    // 行高差 ≤ 行高 45%（防把标题大字与正文小字并进同一段）
+/** 被用户"✕ 拆散"的段落行（存 "x,y"），这些行退出自动聚合，退化为单行 */
+const splitKeys = ref<Set<string>>(new Set())
+
 interface Paragraph { rect: Rect; rects: Rect[]; sensitiveRects: Rect[] }
 const paragraphs = computed<Paragraph[]>(() => {
   const rows = textRegions.value
     .map(r => ({ rect: r.rect as Rect, sensitive: (r as any).sensitive != null }))
+    .filter(r => !splitKeys.value.has(`${r.rect.x},${r.rect.y}`))
     .slice()
     .sort((a, b) => a.rect.y - b.rect.y)
   const paras: Paragraph[] = []
@@ -143,8 +150,12 @@ const paragraphs = computed<Paragraph[]>(() => {
       const lr = last.rect
       const gap = r.rect.y - (lr.y + lr.h)
       const gapLimit = Math.max(PARAGRAPH_MIN_GAP, Math.round((lr.h || 20) * PARAGRAPH_GAP_RATIO))
-      const xOverlap = r.rect.x < lr.x + lr.w && r.rect.x + r.rect.w > lr.x
-      if (gap >= -1 && gap <= gapLimit && xOverlap) {
+      const ov = Math.min(r.rect.x + r.rect.w, lr.x + lr.w) - Math.max(r.rect.x, lr.x)
+      const minW = Math.min(r.rect.w, lr.w)
+      const xOverlap = ov / minW >= PARAGRAPH_X_COVER
+      const xAlign = Math.abs(r.rect.x - lr.x) <= Math.max(4, minW * PARAGRAPH_X_ALIGN)
+      const hOk = Math.abs(r.rect.h - lr.h) <= (lr.h || 20) * PARAGRAPH_H_RATIO
+      if (gap >= -1 && gap <= gapLimit && xOverlap && xAlign && hOk) {
         last.rects.push(r.rect)
         if (r.sensitive) last.sensitiveRects.push(r.rect)
         last.rect = {
@@ -177,6 +188,14 @@ function toggleParagraph(p: Paragraph) {
     rects.forEach(r => addRegion(r))
   }
 }
+/** 拆散此段：整段行退出自动聚合，恢复为独立的单行框（仍可单独勾选打码） */
+function splitParagraph(p: Paragraph) {
+  const s = new Set(splitKeys.value)
+  p.rects.forEach(r => s.add(`${r.x},${r.y}`))
+  splitKeys.value = s
+}
+/** 复原所有被拆散的段落 */
+function restoreParagraphs() { splitKeys.value = new Set() }
 
 function onFileSelected(e: Event) {
   const target = e.target as HTMLInputElement
@@ -293,6 +312,22 @@ function toggleRegion(region: {x:number,y:number,w:number,h:number}) {
 const hoverTextIdx = ref(-1)
 /** 右侧已点选的文字条数（含图内任何已选框） */
 const checkedTextCount = computed(() => selectedRegions.value.length)
+/** 右侧"✔ 全选所有文字"：覆盖全部 OCR 行（含非敏感标签），与 toggleAll(仅敏感)不同 */
+const allPickRegions = computed<Rect[]>(() =>
+  textRegions.value.map((r: any) => ({ x: r.rect.x, y: r.rect.y, w: r.rect.w, h: r.rect.h })))
+const allPickSelected = computed(() =>
+  allPickRegions.value.length > 0 && allPickRegions.value.every(r => isRegionSelected(r)))
+function togglePickAll() {
+  if (allPickSelected.value) {
+    allPickRegions.value.forEach(r => {
+      const idx = selectedRegions.value.findIndex(x => x.x === r.x && x.y === r.y)
+      if (idx >= 0) removeRegion(idx)
+    })
+  } else {
+    allPickRegions.value.forEach(r => { if (!isRegionSelected(r)) addRegion(r) })
+  }
+}
+function clearPickAll() { clearRegions() }
 
 function isRegionSelected(region: {x:number,y:number,w:number,h:number}): boolean {
   return selectedRegions.value.some(r => r.x === region.x && r.y === region.y)
@@ -645,6 +680,7 @@ onUnmounted(() => { resetUpload() })
             }"
             @click.stop="toggleParagraph(p)">
             <span class="paragraph-label" :title="'整段 ' + p.rects.length + ' 行，点击整段全选并打码'">整段 · {{ p.rects.length }} 行</span>
+            <span class="paragraph-split" title="✕ 拆散这段为单行（不再整段）" @click.stop="splitParagraph(p)">✕</span>
           </div>
           <div v-for="(region, i) in textRegions" :key="'t'+i" class="region-box"
             :class="{
@@ -750,6 +786,11 @@ onUnmounted(() => { resetUpload() })
             <div class="text-pick-head">
               <span class="section-title">🔤 点选文字打码</span>
               <span class="text-pick-count">{{ checkedTextCount }} 已选</span>
+            </div>
+            <div class="text-pick-tools">
+              <span class="select-all" @click="togglePickAll">{{ allPickSelected ? '✖ 取消全选' : '✔ 全选' }}</span>
+              <span class="select-all pick-clear" @click="clearPickAll">清空</span>
+              <span v-if="splitKeys.size" class="select-all pick-restore" @click="restoreParagraphs">↺ 复原段落({{ splitKeys.size }})</span>
             </div>
             <div class="text-pick-list">
               <div v-for="(region, i) in textRegions" :key="'pick'+i" class="text-pick-row"
@@ -892,11 +933,13 @@ onUnmounted(() => { resetUpload() })
     .paragraph-box:hover { background: rgba(108,99,255,0.14); border-color: #6c63ff; }
     .paragraph-selected { border-color: #22c55e !important; background: rgba(34,197,94,0.15); }
     .paragraph-label { position: absolute; top: -16px; left: 0; font-size: 10px; color: #cfcaff; background: rgba(18,18,40,0.94); padding: 1px 5px; border-radius: 3px; white-space: nowrap; line-height: 1.5; pointer-events: none; }
-    .region-box { position: absolute; border: 2px solid #ffcc00; background: rgba(255,204,0,0.08); border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
-.region-box.risk-high { border-color: #ff4444; background: rgba(255,68,68,0.12); }
-.region-box.risk-medium { border-color: #ffaa00; background: rgba(255,170,0,0.10); }
+.paragraph-split { position: absolute; top: -15px; right: 0; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; background: rgba(255,80,80,0.9); border-radius: 50%; cursor: pointer; line-height: 1; opacity: 0.85; transition: opacity 0.15s, background 0.15s; pointer-events: auto; }
+.paragraph-split:hover { opacity: 1; background: #ff4444; }
+    .region-box { position: absolute; border: 2px solid #ffcc00; background: transparent; border-radius: 4px; cursor: pointer; pointer-events: auto; transition: all 0.15s; }
+.region-box.risk-high { border-color: #ff4444; background: transparent; }
+.region-box.risk-medium { border-color: #ffaa00; background: transparent; }
 .region-box.selected { border-color: #6c63ff !important; background: rgba(108,99,255,0.22); border-width: 3px; box-shadow: 0 0 8px rgba(108,99,255,0.45); }
-.region-box.object-region { border-color: #00ccff; background: rgba(0,204,255,0.08); }
+.region-box.object-region { border-color: #00ccff; background: transparent; }
 /* 框色图例：解释未选(风险色红/橙/黄)、已选(紫)、对象框(蓝)、手动框(紫虚线) */
 .box-legend { position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px 10px; max-width: 200px; justify-content: flex-end; background: rgba(0,0,0,0.6); border-radius: 8px; padding: 5px 8px; font-size: 11px; color: #ccc; pointer-events: none; }
 .box-legend .lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -911,11 +954,19 @@ onUnmounted(() => { resetUpload() })
 .draw-box { border-style: dashed; border-color: #6c63ff; background: rgba(108,99,255,0.25); box-shadow: none; }
 .region-label { font-size: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 1px 4px; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; display: block; }
 /* 图中文字框编号徽章：仅显示 #i，昵称移入 title 悬浮提示，避免遮挡图片 */
-.region-no { min-width: 20px; text-align: center; font-weight: 700; background: rgba(20,20,46,0.85); border: 1px solid rgba(108,99,255,0.4); }
+.region-no { min-width: 24px; text-align: center; font-size: 13px; font-weight: 900; color: #fff; background: transparent; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 3px #000, 1px 1px 2px #000; -webkit-text-stroke: 1px rgba(0,0,0,0.9); }
 /* 右侧"点选文字打码"：逐条可勾选，hover 图中定位，底部统一打码 */
 .text-pick-card { margin-top: 10px; }
 .text-pick-head { display: flex; align-items: center; justify-content: space-between; }
 .text-pick-count { font-size: 11px; color: #8888bb; }
+.text-pick-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.text-pick-actions .select-all { font-size: 12px; color: #6c63ff; cursor: pointer; font-weight: 600; }
+.text-pick-actions .pick-clear { color: #8888bb; font-weight: 400; }
+.text-pick-actions .pick-restore { color: #4ade80; font-weight: 600; }
+.text-pick-tools { display: flex; align-items: center; gap: 14px; margin: 6px 0 2px; font-size: 12px; }
+.text-pick-tools .select-all { cursor: pointer; color: #6c63ff; font-weight: 600; }
+.text-pick-tools .pick-clear { color: #8888bb; font-weight: 400; }
+.text-pick-tools .pick-restore { color: #4ade80; font-weight: 600; }
 .text-pick-list { max-height: 220px; overflow-y: auto; border: 1px solid #2a2a4a; border-radius: 8px; margin-top: 6px; background: #141428; }
 .text-pick-row { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 12px; color: #c9c9e8; cursor: pointer; border-bottom: 1px solid #1e1e38; transition: background 0.12s; }
 .text-pick-row:last-child { border-bottom: none; }
