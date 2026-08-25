@@ -288,6 +288,11 @@ planning → coding → testing → done
 
 ## 十三、踩坑记录
 
+### portable 前端必须平铺覆盖同步（勿用嵌套 cp）
+- 运行时后端 serve `portable/frontend`（`YINDUN_STATIC_DIR` 指向该顶层目录）。构建后同步命令必须是：`cd yindun && cp -r frontend/dist/. portable/frontend/`（源带拖尾 `/.`，把内容平铺进目标顶层）。
+- ⚠️ 不要用 `cp -r frontend/dist portable/frontend/`（无拖尾）：目标一旦已存在 `portable/frontend/dist/` 子目录，此命令会把 dist 当子目录嵌套进去，**顶层 index.html 仍是旧版** → 改的功能刷新后毫无变化。症状完全符合"改了却看不到"，却非浏览器缓存。
+- 本会话证实：同步后核验三处 hash 一致（`frontend/dist/index.html`、`portable/frontend/index.html`、`curl http://127.0.0.1:8000/ | grep -o 'index-*.js'`）。
+
 1. **claude CLI 参数（v2.x）**：`--project ./` 和 `--permission-mode acceptEdits` **不支持**（unknown option）。✅ 正确：`claude -p "<prompt>" --allowedTools "Read Grep Glob Edit Write Bash(git status) ..."`；`-p` = headless（跑完即退出）；项目 = 当前目录（先 cd）。
 2. **热循环守卫**：全自动脚本必须"状态连续 N 轮不变就强制停止"（`MAX_STALL=3`），否则 agent 报错会无限重发。
 3. **迭代上限在启动 agent 前检查**（不是跑完再查）。
